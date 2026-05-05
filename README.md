@@ -30,13 +30,13 @@ memory-bank/
 
 ```bash
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/yourorg/memory-bank-kit/main/init.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kendrick/memory-bank-kit/main/init.sh | bash
 
 # Windows PowerShell
-irm https://raw.githubusercontent.com/yourorg/memory-bank-kit/main/init.ps1 | iex
+irm https://raw.githubusercontent.com/kendrick/memory-bank-kit/main/init.ps1 | iex
 ```
 
-Replace `yourorg` with the GitHub org or wherever this repo is hosted.
+Replace `kendrick` with the GitHub org or wherever this repo is hosted.
 
 The installer **detects your stack, prompts before overwriting anything, and drops the following** into your project:
 
@@ -50,7 +50,7 @@ The installer **detects your stack, prompts before overwriting anything, and dro
 
 It also adds `memory-bank/activeContext.md` to `.gitignore`. `activeContext` is meant to be per-developer, not per-team.
 
-Prefer not to install via curl-pipe? Clone the repo and run `./init.sh` from inside your project directory, or use `npx degit yourorg/memory-bank-kit/template` to drop the template files in directly without the interactive installer.
+Prefer not to install via curl-pipe? Clone the repo and run `./init.sh` from inside your project directory, or use `npx degit kendrick/memory-bank-kit/template` to drop the template files in directly without the interactive installer.
 
 ## How it works
 
