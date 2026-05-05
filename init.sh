@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Replace REPO_DEFAULT before publishing the kit. Forks and private mirrors
 # override at install time via the env vars below.
-REPO_DEFAULT="yourorg/memory-bank-kit"
+REPO_DEFAULT="kendrick/memory-bank-kit"
 REPO="${MEMORY_BANK_KIT_REPO:-$REPO_DEFAULT}"
 BRANCH="${MEMORY_BANK_KIT_BRANCH:-main}"
 
