@@ -1,14 +1,14 @@
-# memory-bank-kit installer (Windows / PowerShell)
-# Scaffolds a two-tier memory bank into the current project, with config
+# working-memory-kit installer (Windows / PowerShell)
+# Scaffolds a two-tier working memory into the current project, with config
 # for both Claude Code and GitHub Copilot.
 
 $ErrorActionPreference = 'Stop'
 
 # Replace $RepoDefault before publishing the kit. Forks and private mirrors
 # override at install time via the env vars below.
-$RepoDefault = 'yourorg/memory-bank-kit'
-$Repo   = if ($env:MEMORY_BANK_KIT_REPO)   { $env:MEMORY_BANK_KIT_REPO }   else { $RepoDefault }
-$Branch = if ($env:MEMORY_BANK_KIT_BRANCH) { $env:MEMORY_BANK_KIT_BRANCH } else { 'main' }
+$RepoDefault = 'yourorg/working-memory-kit'
+$Repo   = if ($env:WORKING_MEMORY_KIT_REPO)   { $env:WORKING_MEMORY_KIT_REPO }   else { $RepoDefault }
+$Branch = if ($env:WORKING_MEMORY_KIT_BRANCH) { $env:WORKING_MEMORY_KIT_BRANCH } else { 'main' }
 
 # ---------- helpers ----------
 
@@ -55,11 +55,11 @@ function Append-SectionIfMissing ($srcContent, $dst, $marker) {
     }
     $current = Get-Content $dst -Raw
     if ($current -like "*$marker*") {
-        Write-Info "$dst already contains memory-bank section, leaving alone"
+        Write-Info "$dst already contains working-memory section, leaving alone"
         return
     }
     Add-Content -Path $dst -Value "`n$srcContent"
-    Write-Ok "appended memory-bank section to $dst"
+    Write-Ok "appended working-memory section to $dst"
 }
 
 # ---------- locate template ----------
@@ -76,7 +76,7 @@ if (Test-Path (Join-Path $ScriptDir 'template')) {
     Write-Info "using local template at $Template"
 } else {
     Write-Info "downloading template from $Repo@$Branch"
-    $tmp = New-Item -ItemType Directory -Path (Join-Path $env:TEMP "mbk-$([guid]::NewGuid().Guid)")
+    $tmp = New-Item -ItemType Directory -Path (Join-Path $env:TEMP "wmk-$([guid]::NewGuid().Guid)")
     $tarUrl = "https://codeload.github.com/$Repo/tar.gz/refs/heads/$Branch"
     $tarPath = Join-Path $tmp.FullName 'kit.tar.gz'
     try {
@@ -84,7 +84,7 @@ if (Test-Path (Join-Path $ScriptDir 'template')) {
         tar -xzf $tarPath -C $tmp.FullName
     } catch {
         Write-Fail "could not download template from $Repo@$Branch"
-        Write-Fail "set MEMORY_BANK_KIT_REPO and MEMORY_BANK_KIT_BRANCH if you forked"
+        Write-Fail "set WORKING_MEMORY_KIT_REPO and WORKING_MEMORY_KIT_BRANCH if you forked"
         exit 1
     }
     $Template = (Get-ChildItem -Path $tmp.FullName -Recurse -Directory -Filter 'template' | Select-Object -First 1).FullName
@@ -97,7 +97,7 @@ if (Test-Path (Join-Path $ScriptDir 'template')) {
 # ---------- intro ----------
 
 Write-Host ""
-Write-Host "memory-bank-kit installer" -ForegroundColor Blue
+Write-Host "working-memory-kit installer" -ForegroundColor Blue
 Write-Host "Target: $TargetDir"
 Write-Host ""
 
@@ -148,7 +148,7 @@ if ($Stack.Language) {
 # ---------- check existing structure ----------
 
 $Existing = @()
-if (Test-Path 'memory-bank') { $Existing += 'memory-bank/' }
+if (Test-Path 'working-memory') { $Existing += 'working-memory/' }
 if (Test-Path '.claude')     { $Existing += '.claude/' }
 if (Test-Path '.github')     { $Existing += '.github/' }
 if (Test-Path 'AGENTS.md')   { $Existing += 'AGENTS.md' }
@@ -163,22 +163,22 @@ if ($Existing.Count -gt 0) {
 Write-Host ''
 Write-Info 'scaffolding...'
 
-# ---------- memory-bank ----------
+# ---------- working-memory ----------
 
-if (-not (Test-Path 'memory-bank')) { New-Item -ItemType Directory -Path 'memory-bank' | Out-Null }
-$bankFiles = @('activeContext.example.md','projectOverview.md','decisionLog.md','dataContracts.md','conventions.md','openQuestions.md')
-foreach ($f in $bankFiles) {
-    Copy-IfAbsent (Join-Path $Template "memory-bank\$f") (Join-Path $TargetDir "memory-bank\$f")
+if (-not (Test-Path 'working-memory')) { New-Item -ItemType Directory -Path 'working-memory' | Out-Null }
+$wmFiles = @('activeContext.example.md','projectOverview.md','decisionLog.md','dataContracts.md','conventions.md','openQuestions.md')
+foreach ($f in $wmFiles) {
+    Copy-IfAbsent (Join-Path $Template "working-memory\$f") (Join-Path $TargetDir "working-memory\$f")
 }
 
-if (-not (Test-Path 'memory-bank\activeContext.md')) {
-    Copy-Item 'memory-bank\activeContext.example.md' 'memory-bank\activeContext.md'
-    Write-Ok 'created your local memory-bank/activeContext.md from the template'
+if (-not (Test-Path 'working-memory\activeContext.md')) {
+    Copy-Item 'working-memory\activeContext.example.md' 'working-memory\activeContext.md'
+    Write-Ok 'created your local working-memory/activeContext.md from the template'
 }
 
 # Skip pre-population if the placeholder marker is gone: the team has filled
 # in their overview by hand and we shouldn't clobber it on re-run.
-if ($Stack.Language -and (Get-Content 'memory-bank\projectOverview.md' -Raw) -match '^_To be filled\._') {
+if ($Stack.Language -and (Get-Content 'working-memory\projectOverview.md' -Raw) -match '^_To be filled\._') {
     $repoName = Split-Path $TargetDir -Leaf
     $dirs = (Get-ChildItem -Directory | Select-Object -First 20 | ForEach-Object { "- $($_.Name)" }) -join "`n"
     $fwLine = if ($Stack.Framework) { $Stack.Framework } else { '_(none detected)_' }
@@ -206,65 +206,65 @@ $dirs
 <!-- Non-obvious things an agent must know: monorepo rules, legacy code -->
 <!-- boundaries, API version requirements, browser support, etc. -->
 "@
-    Set-Content -Path 'memory-bank\projectOverview.md' -Value $overview
-    Write-Ok 'pre-populated memory-bank/projectOverview.md with detected stack'
+    Set-Content -Path 'working-memory\projectOverview.md' -Value $overview
+    Write-Ok 'pre-populated working-memory/projectOverview.md with detected stack'
 }
 
-# ---------- .memory-bankrc.example ----------
+# ---------- .working-memoryrc.example ----------
 
 # We ship the example, not the rc itself. Defaults are baked into the hook
 # scripts; the rc is opt-in for teams that want to override line limits or
 # nudge thresholds.
-Copy-IfAbsent (Join-Path $Template '.memory-bankrc.example') `
-              (Join-Path $TargetDir '.memory-bankrc.example')
+Copy-IfAbsent (Join-Path $Template '.working-memoryrc.example') `
+              (Join-Path $TargetDir '.working-memoryrc.example')
 
 # ---------- AGENTS.md ----------
 
 $agentsTemplate = Get-Content (Join-Path $Template 'AGENTS.md') -Raw
-Append-SectionIfMissing $agentsTemplate (Join-Path $TargetDir 'AGENTS.md') '## Memory Bank'
+Append-SectionIfMissing $agentsTemplate (Join-Path $TargetDir 'AGENTS.md') '## Working Memory'
 
 # ---------- Claude Code config ----------
 
 if (-not (Test-Path '.claude\agents')) { New-Item -ItemType Directory -Path '.claude\agents' -Force | Out-Null }
 Copy-IfAbsent `
-    (Join-Path $Template '.claude\agents\memory-bank-synchronizer.md') `
-    (Join-Path $TargetDir '.claude\agents\memory-bank-synchronizer.md')
+    (Join-Path $Template '.claude\agents\working-memory-synchronizer.md') `
+    (Join-Path $TargetDir '.claude\agents\working-memory-synchronizer.md')
 
 $claudeSection = @'
 
-## Memory Bank
+## Working Memory
 
-On session start, always read `memory-bank/activeContext.md`.
-Read other memory bank files as directed by the table in `AGENTS.md`.
-After significant work, run the memory-bank-synchronizer agent or manually update active context.
+On session start, always read `working-memory/activeContext.md`.
+Read other working memory files as directed by the table in `AGENTS.md`.
+After significant work, run the working-memory-synchronizer agent or manually update active context.
 '@
-Append-SectionIfMissing $claudeSection (Join-Path $TargetDir 'CLAUDE.md') '## Memory Bank'
+Append-SectionIfMissing $claudeSection (Join-Path $TargetDir 'CLAUDE.md') '## Working Memory'
 
 # ---------- Copilot config ----------
 
-foreach ($d in @('.github\agents','.github\skills\update-memory-bank','.github\hooks','.github\instructions')) {
+foreach ($d in @('.github\agents','.github\skills\update-working-memory','.github\hooks','.github\instructions')) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
 
-Copy-IfAbsent (Join-Path $Template '.github\agents\memory-bank-synchronizer.agent.md') `
-              (Join-Path $TargetDir '.github\agents\memory-bank-synchronizer.agent.md')
-Copy-IfAbsent (Join-Path $Template '.github\skills\update-memory-bank\SKILL.md') `
-              (Join-Path $TargetDir '.github\skills\update-memory-bank\SKILL.md')
-Copy-IfAbsent (Join-Path $Template '.github\hooks\memory-bank-hooks.json') `
-              (Join-Path $TargetDir '.github\hooks\memory-bank-hooks.json')
+Copy-IfAbsent (Join-Path $Template '.github\agents\working-memory-synchronizer.agent.md') `
+              (Join-Path $TargetDir '.github\agents\working-memory-synchronizer.agent.md')
+Copy-IfAbsent (Join-Path $Template '.github\skills\update-working-memory\SKILL.md') `
+              (Join-Path $TargetDir '.github\skills\update-working-memory\SKILL.md')
+Copy-IfAbsent (Join-Path $Template '.github\hooks\working-memory-hooks.json') `
+              (Join-Path $TargetDir '.github\hooks\working-memory-hooks.json')
 Copy-IfAbsent (Join-Path $Template '.github\instructions\data-layer.instructions.md') `
               (Join-Path $TargetDir '.github\instructions\data-layer.instructions.md')
 
 $copilotTemplate = Get-Content (Join-Path $Template '.github\copilot-instructions.md') -Raw
-Append-SectionIfMissing $copilotTemplate (Join-Path $TargetDir '.github\copilot-instructions.md') '## Memory Bank'
+Append-SectionIfMissing $copilotTemplate (Join-Path $TargetDir '.github\copilot-instructions.md') '## Working Memory'
 
 # ---------- scripts ----------
 
 if (-not (Test-Path 'scripts')) { New-Item -ItemType Directory -Path 'scripts' | Out-Null }
 $scriptFiles = @(
-    'memory-bank-session-start.sh','memory-bank-session-start.ps1',
-    'memory-bank-session-end.sh','memory-bank-session-end.ps1',
-    'update-memory-bank.sh','update-memory-bank.ps1'
+    'working-memory-session-start.sh','working-memory-session-start.ps1',
+    'working-memory-session-end.sh','working-memory-session-end.ps1',
+    'update-working-memory.sh','update-working-memory.ps1'
 )
 foreach ($f in $scriptFiles) {
     Copy-IfAbsent (Join-Path $Template "scripts\$f") (Join-Path $TargetDir "scripts\$f")
@@ -274,17 +274,17 @@ Write-Info 'shell scripts: PowerShell does not need chmod. On Unix systems, run:
 # ---------- gitignore ----------
 
 $gitignore = '.gitignore'
-$line = 'memory-bank/activeContext.md'
+$line = 'working-memory/activeContext.md'
 if (Test-Path $gitignore) {
     $content = Get-Content $gitignore
     if ($content -contains $line) {
         Write-Info '.gitignore already excludes activeContext.md'
     } else {
-        Add-Content $gitignore "`n# Local-only active context (memory-bank-kit)`n$line"
+        Add-Content $gitignore "`n# Local-only active context (working-memory-kit)`n$line"
         Write-Ok 'added activeContext.md to .gitignore'
     }
 } else {
-    Set-Content $gitignore "# Local-only active context (memory-bank-kit)`n$line"
+    Set-Content $gitignore "# Local-only active context (working-memory-kit)`n$line"
     Write-Ok 'created .gitignore with activeContext.md entry'
 }
 
@@ -293,7 +293,7 @@ if (Test-Path $gitignore) {
 Write-Host ''
 Write-Info 'verifying parity...'
 $pairs = @(
-    @{ Claude = '.claude\agents\memory-bank-synchronizer.md'; Copilot = '.github\agents\memory-bank-synchronizer.agent.md' }
+    @{ Claude = '.claude\agents\working-memory-synchronizer.md'; Copilot = '.github\agents\working-memory-synchronizer.agent.md' }
 )
 $parityOk = $true
 foreach ($p in $pairs) {
@@ -311,14 +311,14 @@ Write-Host ''
 Write-Host 'done.' -ForegroundColor Green
 Write-Host ''
 Write-Host 'next steps:'
-Write-Host '  1. Open memory-bank\projectOverview.md and fill in "What This Is".'
-Write-Host '  2. Edit memory-bank\activeContext.md to reflect what you''re working on.'
+Write-Host '  1. Open working-memory\projectOverview.md and fill in "What This Is".'
+Write-Host '  2. Edit working-memory\activeContext.md to reflect what you''re working on.'
 Write-Host '  3. Teammates: after cloning, run:'
-Write-Host '       Copy-Item memory-bank\activeContext.example.md memory-bank\activeContext.md'
-Write-Host '  4. To sync the bank: invoke the memory-bank-synchronizer agent, or'
-Write-Host '     run: .\scripts\update-memory-bank.ps1'
+Write-Host '       Copy-Item working-memory\activeContext.example.md working-memory\activeContext.md'
+Write-Host '  4. To sync working memory: invoke the working-memory-synchronizer agent, or'
+Write-Host '     run: .\scripts\update-working-memory.ps1'
 Write-Host '  5. To tune line limits or nudge thresholds:'
-Write-Host '       Copy-Item .memory-bankrc.example .memory-bankrc   # then edit'
+Write-Host '       Copy-Item .working-memoryrc.example .working-memoryrc   # then edit'
 
 if (-not $parityOk) {
     Write-Host ''

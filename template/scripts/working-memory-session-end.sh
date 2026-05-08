@@ -1,27 +1,27 @@
 #!/bin/bash
-# Reminds the developer to update the memory bank if significant work was done.
+# Reminds the developer to update the working memory if significant work was done.
 
 set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # Hooks fire on every session in every project. Skip silently outside
-# memory-bank consumers.
-if [ ! -d "$REPO_ROOT/memory-bank" ]; then
+# working-memory consumers.
+if [ ! -d "$REPO_ROOT/working-memory" ]; then
   exit 0
 fi
 
-# Reads a key from .memory-bankrc with a default. Parses key=value instead
+# Reads a key from .working-memoryrc with a default. Parses key=value instead
 # of sourcing the file, so a malicious rc can't execute arbitrary shell.
 read_cfg() {
-  local key="$1" default="$2" file="$REPO_ROOT/.memory-bankrc"
+  local key="$1" default="$2" file="$REPO_ROOT/.working-memoryrc"
   local val=""
   [ -f "$file" ] && val=$(grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' "'\''')
   echo "${val:-$default}"
 }
 
-FILE_THRESHOLD="${MEMORY_BANK_FILE_THRESHOLD:-$(read_cfg NUDGE_FILE_THRESHOLD 5)}"
-LINE_THRESHOLD="${MEMORY_BANK_LINE_THRESHOLD:-$(read_cfg NUDGE_LINE_THRESHOLD 200)}"
+FILE_THRESHOLD="${WORKING_MEMORY_FILE_THRESHOLD:-$(read_cfg NUDGE_FILE_THRESHOLD 5)}"
+LINE_THRESHOLD="${WORKING_MEMORY_LINE_THRESHOLD:-$(read_cfg NUDGE_LINE_THRESHOLD 200)}"
 
 # --shortstat covers both signals in one git call. Format example:
 #   " 5 files changed, 200 insertions(+), 50 deletions(-)"
@@ -43,5 +43,5 @@ elif [ "${LINES_CHANGED:-0}" -gt "$LINE_THRESHOLD" ]; then
 fi
 
 if [ -n "$REASON" ]; then
-  echo "{\"systemMessage\":\"You changed $REASON this session. Consider running /update-memory-bank or @memory-bank-synchronizer to keep the memory bank current.\"}"
+  echo "{\"systemMessage\":\"You changed $REASON this session. Consider running /update-working-memory or @working-memory-synchronizer to keep the working memory current.\"}"
 fi

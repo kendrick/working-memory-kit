@@ -6,12 +6,12 @@
 ## Build / Test / Lint
 <!-- Copy exact commands so agents don't guess. -->
 
-## Memory Bank
+## Working Memory
 
-This project uses a two-tier memory bank at `memory-bank/`.
+This project uses a two-tier working memory at `working-memory/`.
 
 ### Always read on session start:
-- `memory-bank/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only / gitignored)
+- `working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only / gitignored)
 
 ### Read on demand:
 | File | Read when... |
@@ -22,7 +22,7 @@ This project uses a two-tier memory bank at `memory-bank/`.
 | `conventions.md` | Writing new code or reviewing patterns |
 | `openQuestions.md` | Encountering ambiguity — check here before guessing |
 
-### Updating the bank:
+### Updating working memory:
 - After completing a feature or making a significant decision, update `activeContext.md` and the relevant on-demand file.
 - `activeContext.md` is a queue: evict completed items to `decisionLog.md`.
 - Never let `activeContext.md` exceed 20 lines.

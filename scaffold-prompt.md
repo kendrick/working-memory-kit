@@ -1,6 +1,6 @@
-# Memory Bank Kit — Scaffold Prompt
+# Working Memory Kit — Scaffold Prompt
 
-> **What this is:** A self-contained prompt you can hand to Claude Code, GitHub Copilot, or any code-aware agent. It will scaffold a two-tier memory bank into your project with the necessary agent configuration and hooks for both Claude Code and GitHub Copilot.
+> **What this is:** A self-contained prompt you can hand to Claude Code, GitHub Copilot, or any code-aware agent. It will scaffold a two-tier working memory into your project with the necessary agent configuration and hooks for both Claude Code and GitHub Copilot.
 >
 > **Works on:** Greenfield or brownfield projects. The scaffold detects existing structure and adapts.
 
@@ -8,36 +8,36 @@
 
 ## Installation
 
-From a GitHub-hosted repository (e.g., `yourorg/memory-bank-kit`), consumers can install with a one-liner:
+From a GitHub-hosted repository (e.g., `yourorg/working-memory-kit`), consumers can install with a one-liner:
 
 ```bash
 # Option A: npx degit (no git history, just files — macOS/Linux/Windows)
-npx degit yourorg/memory-bank-kit/template --force
+npx degit yourorg/working-memory-kit/template --force
 
 # Option B: curl + tar (macOS/Linux)
-curl -fsSL https://github.com/yourorg/memory-bank-kit/releases/latest/download/scaffold.tar.gz \
+curl -fsSL https://github.com/yourorg/working-memory-kit/releases/latest/download/scaffold.tar.gz \
   | tar -xz --strip-components=1
 
 # Option C: init script (macOS/Linux)
-curl -fsSL https://raw.githubusercontent.com/yourorg/memory-bank-kit/main/init.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yourorg/working-memory-kit/main/init.sh | bash
 
 # Option D: init script (Windows PowerShell)
-irm https://raw.githubusercontent.com/yourorg/memory-bank-kit/main/init.ps1 | iex
+irm https://raw.githubusercontent.com/yourorg/working-memory-kit/main/init.ps1 | iex
 
 # Option E: gh skill (installs only the Copilot skill, not the full scaffold)
-gh skill install yourorg/memory-bank-kit
+gh skill install yourorg/working-memory-kit
 ```
 
 The repository structure for hosting this kit:
 
 ```
-memory-bank-kit/
+working-memory-kit/
 ├── README.md
 ├── init.sh                  # macOS/Linux installer
 ├── init.ps1                 # Windows installer
 ├── scaffold-prompt.md       # This file
 └── template/                # What gets copied into the consumer's project
-    ├── memory-bank/
+    ├── working-memory/
     │   ├── activeContext.example.md
     │   ├── projectOverview.md
     │   ├── decisionLog.md
@@ -47,34 +47,34 @@ memory-bank-kit/
     ├── AGENTS.md
     ├── .claude/
     │   └── agents/
-    │       └── memory-bank-synchronizer.md
+    │       └── working-memory-synchronizer.md
     ├── .github/
     │   ├── copilot-instructions.md
     │   ├── agents/
-    │   │   └── memory-bank-synchronizer.agent.md
+    │   │   └── working-memory-synchronizer.agent.md
     │   ├── skills/
-    │   │   └── update-memory-bank/
+    │   │   └── update-working-memory/
     │   │       └── SKILL.md
     │   ├── hooks/
-    │   │   └── memory-bank-hooks.json
+    │   │   └── working-memory-hooks.json
     │   └── instructions/
     │       └── data-layer.instructions.md
     └── scripts/
-        ├── memory-bank-session-start.sh    # macOS/Linux hook
-        ├── memory-bank-session-start.ps1   # Windows hook
-        ├── memory-bank-session-end.sh
-        ├── memory-bank-session-end.ps1
-        ├── update-memory-bank.sh           # manual sync trigger
-        └── update-memory-bank.ps1
+        ├── working-memory-session-start.sh    # macOS/Linux hook
+        ├── working-memory-session-start.ps1   # Windows hook
+        ├── working-memory-session-end.sh
+        ├── working-memory-session-end.ps1
+        ├── update-working-memory.sh           # manual sync trigger
+        └── update-working-memory.ps1
 ```
 
 The `init.sh` (macOS/Linux) and `init.ps1` (Windows) installers should:
 
-1. Check for existing `memory-bank/`, `.claude/`, `.github/` directories
+1. Check for existing `working-memory/`, `.claude/`, `.github/` directories
 2. Prompt before overwriting anything
 3. Merge into existing `copilot-instructions.md`, `AGENTS.md`, or `.github/agents/` if present
 4. Copy `activeContext.example.md` → `activeContext.md` for the installing developer
-5. Append `memory-bank/activeContext.md` to `.gitignore`
+5. Append `working-memory/activeContext.md` to `.gitignore`
 6. Mark `.sh` scripts as executable (macOS/Linux only)
 7. Run a quick project scan and pre-populate `projectOverview.md` with detected stack info
 8. Verify parity: confirm that both Claude Code and Copilot configurations were created
@@ -87,7 +87,7 @@ Paste everything below this line into your agent.
 
 ---
 
-You are scaffolding a **two-tier memory bank** into this project. The memory bank gives AI agents persistent awareness of project state across sessions without bloating context on every turn.
+You are scaffolding a **two-tier working memory** into this project. The working memory gives AI agents persistent awareness of project state across sessions without bloating context on every turn.
 
 > **Implementation note:** Before creating Copilot-specific files (`.github/agents/`, `.github/skills/`, `.github/hooks/`), search the web for the latest GitHub Copilot documentation on custom agents, agent skills, and hooks to verify that file formats, frontmatter schemas, and directory conventions have not changed. Key docs to check:
 > - https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/create-custom-agents
@@ -103,7 +103,7 @@ Before creating anything, scan the project root for:
 
 - `package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, or similar (detect stack)
 - Existing `AGENTS.md`, `CLAUDE.md`, `COPILOT.md`, `.github/copilot-instructions.md`
-- Existing `memory-bank/` directory
+- Existing `working-memory/` directory
 - `.claude/` directory and any existing agent definitions
 - `.github/agents/` directory and any existing `.agent.md` files
 - `.github/skills/` directory and any existing skills
@@ -113,13 +113,13 @@ Before creating anything, scan the project root for:
 - Build/test/lint commands in package.json scripts, Makefile, etc.
 - **Operating system** — detect whether the environment is macOS/Linux or Windows to determine which script variants to create (`.sh` vs `.ps1`). Create both by default if the OS is unknown or if the project is shared across platforms.
 
-Report what you found before proceeding. If a memory bank already exists, ask whether to reset or merge.
+Report what you found before proceeding. If a working memory already exists, ask whether to reset or merge.
 
-### Step 2 — Create the memory bank directory
+### Step 2 — Create the working memory directory
 
-Create `memory-bank/` at the project root with these six files:
+Create `working-memory/` at the project root with these six files:
 
-#### `memory-bank/activeContext.example.md`
+#### `working-memory/activeContext.example.md`
 
 This is the **committed template**. Each developer copies it to `activeContext.md` locally. The actual `activeContext.md` is gitignored because active context is per-developer — two people on the same team have different active contexts, and committing it creates constant meaningless merge conflicts on the most frequently updated file.
 
@@ -143,10 +143,10 @@ _None yet._
 After creating the example file, also create the developer's working copy:
 
 ```bash
-cp memory-bank/activeContext.example.md memory-bank/activeContext.md
+cp working-memory/activeContext.example.md working-memory/activeContext.md
 ```
 
-#### `memory-bank/projectOverview.md`
+#### `working-memory/projectOverview.md`
 
 ```markdown
 # Project Overview
@@ -173,7 +173,7 @@ _To be filled._
 
 Pre-populate the Stack and Repository Structure sections using what you detected in Step 1. For brownfield projects, note any areas of the codebase that should not be modified without explicit permission.
 
-#### `memory-bank/decisionLog.md`
+#### `working-memory/decisionLog.md`
 
 ```markdown
 # Decision Log
@@ -188,7 +188,7 @@ Pre-populate the Stack and Repository Structure sections using what you detected
 _No decisions logged yet._
 ```
 
-#### `memory-bank/dataContracts.md`
+#### `working-memory/dataContracts.md`
 
 ```markdown
 # Data Contracts
@@ -200,7 +200,7 @@ _No decisions logged yet._
 _No contracts defined yet._
 ```
 
-#### `memory-bank/conventions.md`
+#### `working-memory/conventions.md`
 
 ```markdown
 # Conventions
@@ -221,7 +221,7 @@ _Not yet defined._
 _Not yet defined._
 ```
 
-#### `memory-bank/openQuestions.md`
+#### `working-memory/openQuestions.md`
 
 ```markdown
 # Open Questions
@@ -234,9 +234,9 @@ _No open questions yet._
 
 ### Step 3 — Create or update AGENTS.md (thin root)
 
-Create `AGENTS.md` at the project root. If one already exists, merge the memory bank section into it without removing existing content.
+Create `AGENTS.md` at the project root. If one already exists, merge the working memory section into it without removing existing content.
 
-The file must stay lean. It is the "sticky note on the monitor" — the agent reads this every session. The memory bank is the filing cabinet it opens on demand.
+The file must stay lean. It is the "sticky note on the monitor" — the agent reads this every session. The working memory is the filing cabinet it opens on demand.
 
 ```markdown
 # AGENTS.md
@@ -247,12 +247,12 @@ The file must stay lean. It is the "sticky note on the monitor" — the agent re
 ## Build / Test / Lint
 <!-- Copy exact commands so agents don't guess. -->
 
-## Memory Bank
+## Working Memory
 
-This project uses a two-tier memory bank at `memory-bank/`.
+This project uses a two-tier working memory at `working-memory/`.
 
 ### Always read on session start:
-- `memory-bank/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only / gitignored)
+- `working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only / gitignored)
 
 ### Read on demand:
 | File | Read when... |
@@ -263,7 +263,7 @@ This project uses a two-tier memory bank at `memory-bank/`.
 | `conventions.md` | Writing new code or reviewing patterns |
 | `openQuestions.md` | Encountering ambiguity — check here before guessing |
 
-### Updating the bank:
+### Updating working memory:
 - After completing a feature or making a significant decision, update `activeContext.md` and the relevant on-demand file.
 - `activeContext.md` is a queue: evict completed items to `decisionLog.md`.
 - Never let `activeContext.md` exceed 20 lines.
@@ -276,26 +276,26 @@ Populate the Stack and Build/Test/Lint sections from what you detected.
 
 ### Step 4 — Claude Code configuration
 
-#### 4a — Claude Code agent: memory bank synchronizer
+#### 4a — Claude Code agent: working memory synchronizer
 
-Create `.claude/agents/memory-bank-synchronizer.md`:
+Create `.claude/agents/working-memory-synchronizer.md`:
 
 ```markdown
 ---
-name: memory-bank-synchronizer
+name: working-memory-synchronizer
 description: >
-  Synchronizes memory bank with project state. Invoke after completing a feature,
+  Synchronizes working memory with project state. Invoke after completing a feature,
   making an architectural decision, or when activeContext.md feels stale.
-  Can also be triggered with /update-memory-bank.
+  Can also be triggered with /update-working-memory.
 ---
 
-# Memory Bank Synchronizer
+# Working Memory Synchronizer
 
-You are a maintenance agent responsible for keeping the memory bank accurate and lean.
+You are a maintenance agent responsible for keeping the working memory accurate and lean.
 
 ## Process
 
-1. Read all files in `memory-bank/` (five committed files plus the local `activeContext.md`).
+1. Read all files in `working-memory/` (five committed files plus the local `activeContext.md`).
 2. Scan recent changes in the working tree (`git diff --stat HEAD~5` or similar).
 3. For each file, determine:
    - Is anything **stale** (describes something that no longer matches the code)?
@@ -320,37 +320,37 @@ You are a maintenance agent responsible for keeping the memory bank accurate and
 If a `CLAUDE.md` file exists at the project root, append the following block to it. If it does not exist, create it with only this content:
 
 ```markdown
-## Memory Bank
+## Working Memory
 
-On session start, always read `memory-bank/activeContext.md`.
-Read other memory bank files as directed by the table in `AGENTS.md`.
-After significant work, run the memory-bank-synchronizer agent or manually update active context.
+On session start, always read `working-memory/activeContext.md`.
+Read other working memory files as directed by the table in `AGENTS.md`.
+After significant work, run the working-memory-synchronizer agent or manually update active context.
 ```
 
 ### Step 5 — GitHub Copilot configuration
 
 Copilot supports custom agents, agent skills, lifecycle hooks, and path-specific instructions. This step creates equivalents of everything Claude Code gets, using Copilot's native primitives.
 
-#### 5a — Copilot custom agent: memory bank synchronizer
+#### 5a — Copilot custom agent: working memory synchronizer
 
-Create `.github/agents/memory-bank-synchronizer.agent.md`:
+Create `.github/agents/working-memory-synchronizer.agent.md`:
 
 ```markdown
 ---
-name: memory-bank-synchronizer
+name: working-memory-synchronizer
 description: >
-  Synchronizes the memory bank with project state. Use after completing a
+  Synchronizes the working memory with project state. Use after completing a
   feature, making an architectural decision, or when context feels stale.
-  Equivalent to running /update-memory-bank.
+  Equivalent to running /update-working-memory.
 ---
 
-# Memory Bank Synchronizer
+# Working Memory Synchronizer
 
-You are a maintenance agent responsible for keeping the memory bank accurate and lean.
+You are a maintenance agent responsible for keeping the working memory accurate and lean.
 
 ## Process
 
-1. Read all files in `memory-bank/` (five committed files plus the local `activeContext.md`).
+1. Read all files in `working-memory/` (five committed files plus the local `activeContext.md`).
 2. Scan recent changes in the working tree (`git diff --stat HEAD~5` or similar).
 3. For each file, determine:
    - Is anything **stale** (describes something that no longer matches the code)?
@@ -370,27 +370,27 @@ You are a maintenance agent responsible for keeping the memory bank accurate and
 - Never fabricate information. If unsure, add to `openQuestions.md`.
 ```
 
-#### 5b — Copilot agent skill: update-memory-bank
+#### 5b — Copilot agent skill: update-working-memory
 
-Create `.github/skills/update-memory-bank/SKILL.md`:
+Create `.github/skills/update-working-memory/SKILL.md`:
 
 ```markdown
 ---
-name: update-memory-bank
+name: update-working-memory
 description: >
-  Reads the current memory bank state, diffs it against recent git changes,
+  Reads the current working memory state, diffs it against recent git changes,
   and proposes updates. Use when finishing a feature, resolving a decision,
   or when active context feels stale.
 ---
 
-# Update Memory Bank
+# Update Working Memory
 
 When this skill is activated, perform the following:
 
-1. Read `memory-bank/activeContext.md` (local, may not exist yet — if missing, create from `activeContext.example.md`).
-2. Read all other files in `memory-bank/`.
+1. Read `working-memory/activeContext.md` (local, may not exist yet — if missing, create from `activeContext.example.md`).
+2. Read all other files in `working-memory/`.
 3. Run `git diff --stat HEAD~5` to identify recent changes.
-4. For each memory bank file, determine if anything is stale or missing.
+4. For each working memory file, determine if anything is stale or missing.
 5. Enforce the 20-line hard limit on `activeContext.md` — evict completed items to `decisionLog.md`.
 6. Propose all changes as a batch, grouped by file, and wait for confirmation before writing.
 
@@ -406,11 +406,11 @@ When this skill is activated, perform the following:
 | `openQuestions.md` | Remove answered questions (move answers to decision log). |
 ```
 
-Users can invoke this skill in VS Code by typing `/update-memory-bank` in Copilot Chat, or it can be invoked by the memory-bank-synchronizer agent.
+Users can invoke this skill in VS Code by typing `/update-working-memory` in Copilot Chat, or it can be invoked by the working-memory-synchronizer agent.
 
 #### 5c — Copilot lifecycle hooks
 
-Create `.github/hooks/memory-bank-hooks.json` using the VS Code hook schema (PascalCase event names, `command` field, `timeout` in seconds, with `windows` for the PowerShell variant):
+Create `.github/hooks/working-memory-hooks.json` using the VS Code hook schema (PascalCase event names, `command` field, `timeout` in seconds, with `windows` for the PowerShell variant):
 
 ```json
 {
@@ -419,16 +419,16 @@ Create `.github/hooks/memory-bank-hooks.json` using the VS Code hook schema (Pas
     "SessionStart": [
       {
         "type": "command",
-        "command": "./scripts/memory-bank-session-start.sh",
-        "windows": "powershell -NoProfile -File ./scripts/memory-bank-session-start.ps1",
+        "command": "./scripts/working-memory-session-start.sh",
+        "windows": "powershell -NoProfile -File ./scripts/working-memory-session-start.ps1",
         "timeout": 10
       }
     ],
     "Stop": [
       {
         "type": "command",
-        "command": "./scripts/memory-bank-session-end.sh",
-        "windows": "powershell -NoProfile -File ./scripts/memory-bank-session-end.ps1",
+        "command": "./scripts/working-memory-session-end.sh",
+        "windows": "powershell -NoProfile -File ./scripts/working-memory-session-end.ps1",
         "timeout": 10
       }
     ]
@@ -438,7 +438,7 @@ Create `.github/hooks/memory-bank-hooks.json` using the VS Code hook schema (Pas
 
 Create the hook scripts. These must have both bash and PowerShell variants for cross-platform support.
 
-**`scripts/memory-bank-session-start.sh`** (macOS/Linux):
+**`scripts/working-memory-session-start.sh`** (macOS/Linux):
 
 ```bash
 #!/bin/bash
@@ -448,63 +448,63 @@ Create the hook scripts. These must have both bash and PowerShell variants for c
 set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-BANK_DIR="$REPO_ROOT/memory-bank"
+WM_DIR="$REPO_ROOT/working-memory"
 
-# Hooks fire on every session in every project, not just memory-bank
+# Hooks fire on every session in every project, not just working-memory
 # consumers. Bail quietly so unrelated repos don't see noise.
-if [ ! -d "$BANK_DIR" ]; then
+if [ ! -d "$WM_DIR" ]; then
   exit 0
 fi
 
 # {"systemMessage":"..."} on stdout is the hook protocol — the host surfaces
 # it to the user. Plain echoes get ignored.
-if [ ! -f "$BANK_DIR/activeContext.md" ]; then
-  if [ -f "$BANK_DIR/activeContext.example.md" ]; then
-    cp "$BANK_DIR/activeContext.example.md" "$BANK_DIR/activeContext.md"
-    echo '{"systemMessage":"Created memory-bank/activeContext.md from template. Update it with your current focus."}'
+if [ ! -f "$WM_DIR/activeContext.md" ]; then
+  if [ -f "$WM_DIR/activeContext.example.md" ]; then
+    cp "$WM_DIR/activeContext.example.md" "$WM_DIR/activeContext.md"
+    echo '{"systemMessage":"Created working-memory/activeContext.md from template. Update it with your current focus."}'
   else
-    echo '{"systemMessage":"No activeContext.example.md found. Memory bank may not be initialized."}'
+    echo '{"systemMessage":"No activeContext.example.md found. Working memory may not be initialized."}'
   fi
 else
   # 20 is the hard limit set by activeContext.example.md.
-  LINE_COUNT=$(grep -c '[^[:space:]]' "$BANK_DIR/activeContext.md" || true)
+  LINE_COUNT=$(grep -c '[^[:space:]]' "$WM_DIR/activeContext.md" || true)
   if [ "${LINE_COUNT:-0}" -gt 20 ]; then
-    echo "{\"systemMessage\":\"Warning: activeContext.md has $LINE_COUNT non-empty lines (limit is 20). Run /update-memory-bank to prune it.\"}"
+    echo "{\"systemMessage\":\"Warning: activeContext.md has $LINE_COUNT non-empty lines (limit is 20). Run /update-working-memory to prune it.\"}"
   fi
 fi
 ```
 
-**`scripts/memory-bank-session-start.ps1`** (Windows): mirror the bash logic using `Test-Path`, `Copy-Item`, and `Write-Output` for the JSON envelope.
+**`scripts/working-memory-session-start.ps1`** (Windows): mirror the bash logic using `Test-Path`, `Copy-Item`, and `Write-Output` for the JSON envelope.
 
-**`scripts/memory-bank-session-end.sh`** (macOS/Linux):
+**`scripts/working-memory-session-end.sh`** (macOS/Linux):
 
 ```bash
 #!/bin/bash
-# Reminds the developer to update the memory bank if significant work was done.
+# Reminds the developer to update the working memory if significant work was done.
 
 set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-if [ ! -d "$REPO_ROOT/memory-bank" ]; then
+if [ ! -d "$REPO_ROOT/working-memory" ]; then
   exit 0
 fi
 
 CHANGED_FILES=$(git -C "$REPO_ROOT" diff --name-only HEAD 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 
 # Five is a heuristic threshold for "this session did real work, nudge them
-# to update the bank." Tune to taste.
+# to update working memory." Tune to taste.
 if [ "${CHANGED_FILES:-0}" -gt 5 ]; then
-  echo "{\"systemMessage\":\"You changed $CHANGED_FILES files this session. Consider running /update-memory-bank or @memory-bank-synchronizer to keep the memory bank current.\"}"
+  echo "{\"systemMessage\":\"You changed $CHANGED_FILES files this session. Consider running /update-working-memory or @working-memory-synchronizer to keep the working memory current.\"}"
 fi
 ```
 
-**`scripts/memory-bank-session-end.ps1`** (Windows): mirror the bash logic.
+**`scripts/working-memory-session-end.ps1`** (Windows): mirror the bash logic.
 
 Mark all shell scripts as executable:
 
 ```bash
-chmod +x scripts/memory-bank-session-start.sh scripts/memory-bank-session-end.sh
+chmod +x scripts/working-memory-session-start.sh scripts/working-memory-session-end.sh
 ```
 
 On Windows, PowerShell scripts do not require a chmod equivalent — they execute based on the system's execution policy.
@@ -516,12 +516,12 @@ Create or merge into `.github/copilot-instructions.md`:
 ```markdown
 # Copilot Project Instructions
 
-## Memory Bank
+## Working Memory
 
-This project maintains a two-tier memory bank at `memory-bank/` for cross-session context.
+This project maintains a two-tier working memory at `working-memory/` for cross-session context.
 
 ### Always read on session start:
-- `memory-bank/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only)
+- `working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only)
 
 ### Read on demand:
 | File | Read when... |
@@ -532,18 +532,18 @@ This project maintains a two-tier memory bank at `memory-bank/` for cross-sessio
 | `conventions.md` | Writing new code or reviewing patterns |
 | `openQuestions.md` | Encountering ambiguity — check here before guessing |
 
-### Updating the bank:
+### Updating working memory:
 - After completing a feature or making a significant decision, update `activeContext.md` and the relevant on-demand file.
 - `activeContext.md` is a queue: evict completed items to `decisionLog.md`.
 - Never let `activeContext.md` exceed 20 lines.
-- You can invoke the `@memory-bank-synchronizer` agent or type `/update-memory-bank` to trigger a full sync.
+- You can invoke the `@working-memory-synchronizer` agent or type `/update-working-memory` to trigger a full sync.
 ```
 
-If a `.github/copilot-instructions.md` already exists, insert the Memory Bank section at the top without removing existing instructions.
+If a `.github/copilot-instructions.md` already exists, insert the Working Memory section at the top without removing existing instructions.
 
 #### 5e — Path-specific instructions (optional but recommended)
 
-If the project has distinct areas that interact with the memory bank differently (e.g., a `src/data/` directory that should always consult data contracts), create path-specific instruction files.
+If the project has distinct areas that interact with the working memory differently (e.g., a `src/data/` directory that should always consult data contracts), create path-specific instruction files.
 
 Create `.github/instructions/data-layer.instructions.md`:
 
@@ -552,7 +552,7 @@ Create `.github/instructions/data-layer.instructions.md`:
 applyTo: "**/data/**,**/api/**,**/lib/data/**"
 ---
 
-When working on files in the data layer, always read `memory-bank/dataContracts.md` first.
+When working on files in the data layer, always read `working-memory/dataContracts.md` first.
 All data-consuming code must conform to the interfaces defined there.
 If you need to change a data shape, update `dataContracts.md` before modifying code.
 ```
@@ -563,14 +563,14 @@ Create additional `.instructions.md` files as needed for other areas of the code
 
 Create a convenience script that works from both Claude Code and Copilot CLI contexts.
 
-**`scripts/update-memory-bank.sh`** (macOS/Linux): print activeContext.md status (line count vs. the 20 limit), modification times for each bank file, and a `git diff --stat HEAD~5` summary so the developer can see what changed before deciding what to update. Branch on `$OSTYPE` for `stat` flags, since BSD and GNU `stat` are not flag-compatible.
+**`scripts/update-working-memory.sh`** (macOS/Linux): print activeContext.md status (line count vs. the 20 limit), modification times for each working-memory file, and a `git diff --stat HEAD~5` summary so the developer can see what changed before deciding what to update. Branch on `$OSTYPE` for `stat` flags, since BSD and GNU `stat` are not flag-compatible.
 
-**`scripts/update-memory-bank.ps1`** (Windows): same output, written with `Get-ChildItem` and `Get-Content`.
+**`scripts/update-working-memory.ps1`** (Windows): same output, written with `Get-ChildItem` and `Get-Content`.
 
 Mark the shell script as executable:
 
 ```bash
-chmod +x scripts/update-memory-bank.sh
+chmod +x scripts/update-working-memory.sh
 ```
 
 ### Step 7 — Git configuration
@@ -579,13 +579,13 @@ Add `activeContext.md` to `.gitignore` — it is per-developer local state. The 
 
 ```
 # .gitignore (append)
-memory-bank/activeContext.md
+working-memory/activeContext.md
 ```
 
 If the project has a `.gitattributes` file, add:
 
 ```
-memory-bank/*.md merge=union
+working-memory/*.md merge=union
 ```
 
 This reduces merge conflicts on append-only files like the decision log.
@@ -600,6 +600,6 @@ After scaffolding, output a summary:
 - Any conflicts or existing files that were preserved
 - **Platform coverage**: Confirm that both `.sh` and `.ps1` script variants were created
 - **Copilot parity check**: Confirm that for every `.claude/agents/*.md` file, a corresponding `.github/agents/*.agent.md` exists
-- Suggested next step: "Open `memory-bank/projectOverview.md` and fill in the 'What This Is' section, then you're ready to go."
-- Remind the user: "`activeContext.md` is gitignored. Each team member should run `cp memory-bank/activeContext.example.md memory-bank/activeContext.md` (or `Copy-Item` on Windows) after cloning."
-- Tip: "In VS Code, type `/update-memory-bank` in Copilot Chat to sync the memory bank. In Claude Code, invoke the `memory-bank-synchronizer` agent or use `/update-memory-bank`."
+- Suggested next step: "Open `working-memory/projectOverview.md` and fill in the 'What This Is' section, then you're ready to go."
+- Remind the user: "`activeContext.md` is gitignored. Each team member should run `cp working-memory/activeContext.example.md working-memory/activeContext.md` (or `Copy-Item` on Windows) after cloning."
+- Tip: "In VS Code, type `/update-working-memory` in Copilot Chat to sync the working memory. In Claude Code, invoke the `working-memory-synchronizer` agent or use `/update-working-memory`."

@@ -1,15 +1,15 @@
 #!/bin/bash
-# memory-bank-kit installer (macOS/Linux)
-# Scaffolds a two-tier memory bank into the current project, with config
+# working-memory-kit installer (macOS/Linux)
+# Scaffolds a two-tier working memory into the current project, with config
 # for both Claude Code and GitHub Copilot.
 
 set -euo pipefail
 
 # Replace REPO_DEFAULT before publishing the kit. Forks and private mirrors
 # override at install time via the env vars below.
-REPO_DEFAULT="kendrick/memory-bank-kit"
-REPO="${MEMORY_BANK_KIT_REPO:-$REPO_DEFAULT}"
-BRANCH="${MEMORY_BANK_KIT_BRANCH:-main}"
+REPO_DEFAULT="kendrick/working-memory-kit"
+REPO="${WORKING_MEMORY_KIT_REPO:-$REPO_DEFAULT}"
+BRANCH="${WORKING_MEMORY_KIT_BRANCH:-main}"
 
 # ---------- helpers ----------
 
@@ -68,12 +68,12 @@ append_section_if_missing() {
     return
   fi
   if grep -qF "$marker" "$dst"; then
-    info "$dst already contains memory-bank section, leaving alone"
+    info "$dst already contains working-memory section, leaving alone"
     return
   fi
   printf "\n" >> "$dst"
   cat "$src" >> "$dst"
-  ok "appended memory-bank section to $dst"
+  ok "appended working-memory section to $dst"
 }
 
 # ---------- locate template ----------
@@ -95,7 +95,7 @@ else
   if ! curl -fsSL "https://codeload.github.com/$REPO/tar.gz/refs/heads/$BRANCH" \
       | tar -xz -C "$TMPDIR_"; then
     fail "could not download template from $REPO@$BRANCH"
-    fail "set MEMORY_BANK_KIT_REPO and MEMORY_BANK_KIT_BRANCH if you forked"
+    fail "set WORKING_MEMORY_KIT_REPO and WORKING_MEMORY_KIT_BRANCH if you forked"
     exit 1
   fi
   TEMPLATE="$(find "$TMPDIR_" -maxdepth 2 -type d -name template | head -n1)"
@@ -108,7 +108,7 @@ fi
 # ---------- intro ----------
 
 say ""
-say "$(c_blue "memory-bank-kit installer")"
+say "$(c_blue "working-memory-kit installer")"
 say "Target: $TARGET_DIR"
 say ""
 
@@ -163,7 +163,7 @@ fi
 # ---------- check existing structure ----------
 
 EXISTING=()
-[ -d "$TARGET_DIR/memory-bank" ] && EXISTING+=("memory-bank/")
+[ -d "$TARGET_DIR/working-memory" ] && EXISTING+=("working-memory/")
 [ -d "$TARGET_DIR/.claude" ] && EXISTING+=(".claude/")
 [ -d "$TARGET_DIR/.github" ] && EXISTING+=(".github/")
 [ -f "$TARGET_DIR/AGENTS.md" ] && EXISTING+=("AGENTS.md")
@@ -181,22 +181,22 @@ fi
 say ""
 info "scaffolding..."
 
-# ---------- memory-bank ----------
+# ---------- working-memory ----------
 
-mkdir -p "$TARGET_DIR/memory-bank"
+mkdir -p "$TARGET_DIR/working-memory"
 for f in activeContext.example.md projectOverview.md decisionLog.md dataContracts.md conventions.md openQuestions.md; do
-  copy_if_absent "$TEMPLATE/memory-bank/$f" "$TARGET_DIR/memory-bank/$f"
+  copy_if_absent "$TEMPLATE/working-memory/$f" "$TARGET_DIR/working-memory/$f"
 done
 
 # Each developer gets their own activeContext.md.
-if [ ! -f "$TARGET_DIR/memory-bank/activeContext.md" ]; then
-  cp "$TARGET_DIR/memory-bank/activeContext.example.md" "$TARGET_DIR/memory-bank/activeContext.md"
-  ok "created your local memory-bank/activeContext.md from the template"
+if [ ! -f "$TARGET_DIR/working-memory/activeContext.md" ]; then
+  cp "$TARGET_DIR/working-memory/activeContext.example.md" "$TARGET_DIR/working-memory/activeContext.md"
+  ok "created your local working-memory/activeContext.md from the template"
 fi
 
 # Skip pre-population if the placeholder marker is gone: the team has filled
 # in their overview by hand and we shouldn't clobber it on re-run.
-if [ -n "$DETECTED_LANG" ] && grep -q "^_To be filled._" "$TARGET_DIR/memory-bank/projectOverview.md" 2>/dev/null; then
+if [ -n "$DETECTED_LANG" ] && grep -q "^_To be filled._" "$TARGET_DIR/working-memory/projectOverview.md" 2>/dev/null; then
   TMP_OVERVIEW=$(mktemp)
   REPO_NAME="$(basename "$TARGET_DIR")"
   cat > "$TMP_OVERVIEW" <<EOF
@@ -223,64 +223,64 @@ $(ls -d */ 2>/dev/null | head -20 | sed 's|/$||' | sed 's|^|- |')
 <!-- Non-obvious things an agent must know: monorepo rules, legacy code -->
 <!-- boundaries, API version requirements, browser support, etc. -->
 EOF
-  mv "$TMP_OVERVIEW" "$TARGET_DIR/memory-bank/projectOverview.md"
-  ok "pre-populated memory-bank/projectOverview.md with detected stack"
+  mv "$TMP_OVERVIEW" "$TARGET_DIR/working-memory/projectOverview.md"
+  ok "pre-populated working-memory/projectOverview.md with detected stack"
 fi
 
-# ---------- .memory-bankrc.example ----------
+# ---------- .working-memoryrc.example ----------
 
 # We ship the example, not the rc itself. Defaults are baked into the hook
 # scripts; the rc is opt-in for teams that want to override line limits or
-# nudge thresholds. Devs cp it to .memory-bankrc when they need it.
+# nudge thresholds. Devs cp it to .working-memoryrc when they need it.
 copy_if_absent \
-  "$TEMPLATE/.memory-bankrc.example" \
-  "$TARGET_DIR/.memory-bankrc.example"
+  "$TEMPLATE/.working-memoryrc.example" \
+  "$TARGET_DIR/.working-memoryrc.example"
 
 # ---------- AGENTS.md (merge or create) ----------
 
 append_section_if_missing \
   "$TEMPLATE/AGENTS.md" \
   "$TARGET_DIR/AGENTS.md" \
-  "## Memory Bank"
+  "## Working Memory"
 
 # ---------- Claude Code config ----------
 
 mkdir -p "$TARGET_DIR/.claude/agents"
 copy_if_absent \
-  "$TEMPLATE/.claude/agents/memory-bank-synchronizer.md" \
-  "$TARGET_DIR/.claude/agents/memory-bank-synchronizer.md"
+  "$TEMPLATE/.claude/agents/working-memory-synchronizer.md" \
+  "$TARGET_DIR/.claude/agents/working-memory-synchronizer.md"
 
 CLAUDE_SECTION=$(mktemp)
 cat > "$CLAUDE_SECTION" <<'EOF'
 
-## Memory Bank
+## Working Memory
 
-On session start, always read `memory-bank/activeContext.md`.
-Read other memory bank files as directed by the table in `AGENTS.md`.
-After significant work, run the memory-bank-synchronizer agent or manually update active context.
+On session start, always read `working-memory/activeContext.md`.
+Read other working memory files as directed by the table in `AGENTS.md`.
+After significant work, run the working-memory-synchronizer agent or manually update active context.
 EOF
-append_section_if_missing "$CLAUDE_SECTION" "$TARGET_DIR/CLAUDE.md" "## Memory Bank"
+append_section_if_missing "$CLAUDE_SECTION" "$TARGET_DIR/CLAUDE.md" "## Working Memory"
 rm -f "$CLAUDE_SECTION"
 
 # ---------- Copilot config ----------
 
 mkdir -p \
   "$TARGET_DIR/.github/agents" \
-  "$TARGET_DIR/.github/skills/update-memory-bank" \
+  "$TARGET_DIR/.github/skills/update-working-memory" \
   "$TARGET_DIR/.github/hooks" \
   "$TARGET_DIR/.github/instructions"
 
 copy_if_absent \
-  "$TEMPLATE/.github/agents/memory-bank-synchronizer.agent.md" \
-  "$TARGET_DIR/.github/agents/memory-bank-synchronizer.agent.md"
+  "$TEMPLATE/.github/agents/working-memory-synchronizer.agent.md" \
+  "$TARGET_DIR/.github/agents/working-memory-synchronizer.agent.md"
 
 copy_if_absent \
-  "$TEMPLATE/.github/skills/update-memory-bank/SKILL.md" \
-  "$TARGET_DIR/.github/skills/update-memory-bank/SKILL.md"
+  "$TEMPLATE/.github/skills/update-working-memory/SKILL.md" \
+  "$TARGET_DIR/.github/skills/update-working-memory/SKILL.md"
 
 copy_if_absent \
-  "$TEMPLATE/.github/hooks/memory-bank-hooks.json" \
-  "$TARGET_DIR/.github/hooks/memory-bank-hooks.json"
+  "$TEMPLATE/.github/hooks/working-memory-hooks.json" \
+  "$TARGET_DIR/.github/hooks/working-memory-hooks.json"
 
 copy_if_absent \
   "$TEMPLATE/.github/instructions/data-layer.instructions.md" \
@@ -289,14 +289,14 @@ copy_if_absent \
 append_section_if_missing \
   "$TEMPLATE/.github/copilot-instructions.md" \
   "$TARGET_DIR/.github/copilot-instructions.md" \
-  "## Memory Bank"
+  "## Working Memory"
 
 # ---------- scripts ----------
 
 mkdir -p "$TARGET_DIR/scripts"
-for f in memory-bank-session-start.sh memory-bank-session-start.ps1 \
-         memory-bank-session-end.sh memory-bank-session-end.ps1 \
-         update-memory-bank.sh update-memory-bank.ps1; do
+for f in working-memory-session-start.sh working-memory-session-start.ps1 \
+         working-memory-session-end.sh working-memory-session-end.ps1 \
+         update-working-memory.sh update-working-memory.ps1; do
   copy_if_absent "$TEMPLATE/scripts/$f" "$TARGET_DIR/scripts/$f"
 done
 chmod +x "$TARGET_DIR/scripts/"*.sh 2>/dev/null || true
@@ -305,16 +305,16 @@ ok "marked scripts/*.sh executable"
 # ---------- gitignore ----------
 
 GITIGNORE="$TARGET_DIR/.gitignore"
-GIT_LINE="memory-bank/activeContext.md"
+GIT_LINE="working-memory/activeContext.md"
 if [ -f "$GITIGNORE" ]; then
   if grep -qxF "$GIT_LINE" "$GITIGNORE"; then
     info ".gitignore already excludes activeContext.md"
   else
-    printf "\n# Local-only active context (memory-bank-kit)\n%s\n" "$GIT_LINE" >> "$GITIGNORE"
+    printf "\n# Local-only active context (working-memory-kit)\n%s\n" "$GIT_LINE" >> "$GITIGNORE"
     ok "added activeContext.md to .gitignore"
   fi
 else
-  printf "# Local-only active context (memory-bank-kit)\n%s\n" "$GIT_LINE" > "$GITIGNORE"
+  printf "# Local-only active context (working-memory-kit)\n%s\n" "$GIT_LINE" > "$GITIGNORE"
   ok "created .gitignore with activeContext.md entry"
 fi
 
@@ -324,7 +324,7 @@ say ""
 info "verifying parity..."
 PARITY_OK=1
 for pair in \
-  ".claude/agents/memory-bank-synchronizer.md|.github/agents/memory-bank-synchronizer.agent.md"
+  ".claude/agents/working-memory-synchronizer.md|.github/agents/working-memory-synchronizer.agent.md"
 do
   CLAUDE_F="${pair%%|*}"
   COPILOT_F="${pair##*|}"
@@ -342,14 +342,14 @@ say ""
 say "$(c_green "done.")"
 say ""
 say "next steps:"
-say "  1. Open memory-bank/projectOverview.md and fill in 'What This Is'."
-say "  2. Edit memory-bank/activeContext.md to reflect what you're working on."
+say "  1. Open working-memory/projectOverview.md and fill in 'What This Is'."
+say "  2. Edit working-memory/activeContext.md to reflect what you're working on."
 say "  3. Teammates: after cloning, run:"
-say "       cp memory-bank/activeContext.example.md memory-bank/activeContext.md"
-say "  4. To sync the bank: invoke the memory-bank-synchronizer agent, or"
-say "     run: ./scripts/update-memory-bank.sh"
+say "       cp working-memory/activeContext.example.md working-memory/activeContext.md"
+say "  4. To sync working memory: invoke the working-memory-synchronizer agent, or"
+say "     run: ./scripts/update-working-memory.sh"
 say "  5. To tune line limits or nudge thresholds:"
-say "       cp .memory-bankrc.example .memory-bankrc   # then edit"
+say "       cp .working-memoryrc.example .working-memoryrc   # then edit"
 
 if [ "$PARITY_OK" -eq 0 ]; then
   say ""
