@@ -66,6 +66,12 @@ After meaningful work, you (or the synchronizer agent) move completed items out 
 
 Manual sync: `@working-memory-synchronizer` in Claude Code, or `/update-working-memory` in GitHub Copilot. Or run `./scripts/update-working-memory.sh` from any terminal to see the active config and current state.
 
+## Beyond the scaffold
+
+The scaffold pre-populates stack and structure. For a deeper one-time hydration that scans the codebase, recent git history, ADRs (if any), and other source material to fill `projectOverview.md`, `decisionLog.md`, `dataContracts.md`, and `conventions.md`, see [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md). Reference skill files for each phase live in [`skills/`](skills/).
+
+The synchronizer agent handles ongoing maintenance after that.
+
 ## Customizing
 
 Defaults are baked into the hook scripts. Override per team via a committed `.working-memoryrc`:
@@ -108,6 +114,12 @@ working-memory-kit/
 ├── init.sh                  # macOS/Linux installer
 ├── init.ps1                 # Windows installer
 ├── scaffold-prompt.md       # Standalone prompt you can hand to any agent
+├── guide/                   # Practitioner-facing guides
+│   └── ai-assisted-hydration.md  # Five-phase pipeline for deeper content extraction
+├── skills/                  # Reference Copilot skill files for the hydration phases
+│   └── hydrate-{discover,extract,draft,reconcile,propose}/
+├── examples/
+│   └── hydration-demo/      # Synthesized codebase for demoing the pipeline
 ├── template/                # Files copied into the consumer's project
 │   ├── working-memory/
 │   ├── AGENTS.md

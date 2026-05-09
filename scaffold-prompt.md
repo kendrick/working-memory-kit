@@ -3,6 +3,8 @@
 > **What this is:** A self-contained prompt you can hand to Claude Code, GitHub Copilot, or any code-aware agent. It will scaffold a two-tier working memory into your project with the necessary agent configuration and hooks for both Claude Code and GitHub Copilot.
 >
 > **Works on:** Greenfield or brownfield projects. The scaffold detects existing structure and adapts.
+>
+> **For deeper hydration:** This prompt installs the structure and pre-populates obvious stack/structure facts. For a richer one-time content hydration that scans the codebase, recent git history, and existing docs, see [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md) after the scaffold completes.
 
 ---
 
