@@ -20,4 +20,4 @@ This project maintains a two-tier working memory at `working-memory/` for cross-
 - After completing a feature or making a significant decision, update `activeContext.md` and the relevant on-demand file.
 - `activeContext.md` is a queue: evict completed items to `decisionLog.md`.
 - Never let `activeContext.md` exceed 20 lines.
-- You can invoke the `@working-memory-synchronizer` agent or type `/update-working-memory` to trigger a full sync.
+- Type `/update-working-memory` in Copilot Chat (or invoke the `working-memory-synchronizer` custom agent) to trigger a full sync.
