@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 # Replace $RepoDefault before publishing the kit. Forks and private mirrors
 # override at install time via the env vars below.
-$RepoDefault = 'yourorg/working-memory-kit'
+$RepoDefault = 'kendrick/working-memory-kit'
 $Repo   = if ($env:WORKING_MEMORY_KIT_REPO)   { $env:WORKING_MEMORY_KIT_REPO }   else { $RepoDefault }
 $Branch = if ($env:WORKING_MEMORY_KIT_BRANCH) { $env:WORKING_MEMORY_KIT_BRANCH } else { 'main' }
 
@@ -225,10 +225,15 @@ Append-SectionIfMissing $agentsTemplate (Join-Path $TargetDir 'AGENTS.md') '## W
 
 # ---------- Claude Code config ----------
 
-if (-not (Test-Path '.claude\agents')) { New-Item -ItemType Directory -Path '.claude\agents' -Force | Out-Null }
+foreach ($d in @('.claude\agents','.claude\skills\update-working-memory')) {
+    if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
+}
 Copy-IfAbsent `
     (Join-Path $Template '.claude\agents\working-memory-synchronizer.md') `
     (Join-Path $TargetDir '.claude\agents\working-memory-synchronizer.md')
+Copy-IfAbsent `
+    (Join-Path $Template '.claude\skills\update-working-memory\SKILL.md') `
+    (Join-Path $TargetDir '.claude\skills\update-working-memory\SKILL.md')
 
 $claudeSection = @'
 
@@ -242,14 +247,10 @@ Append-SectionIfMissing $claudeSection (Join-Path $TargetDir 'CLAUDE.md') '## Wo
 
 # ---------- Copilot config ----------
 
-foreach ($d in @('.github\agents','.github\skills\update-working-memory','.github\hooks','.github\instructions')) {
+foreach ($d in @('.github\hooks','.github\instructions')) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
 
-Copy-IfAbsent (Join-Path $Template '.github\agents\working-memory-synchronizer.agent.md') `
-              (Join-Path $TargetDir '.github\agents\working-memory-synchronizer.agent.md')
-Copy-IfAbsent (Join-Path $Template '.github\skills\update-working-memory\SKILL.md') `
-              (Join-Path $TargetDir '.github\skills\update-working-memory\SKILL.md')
 Copy-IfAbsent (Join-Path $Template '.github\hooks\working-memory-hooks.json') `
               (Join-Path $TargetDir '.github\hooks\working-memory-hooks.json')
 Copy-IfAbsent (Join-Path $Template '.github\instructions\data-layer.instructions.md') `
@@ -291,17 +292,18 @@ if (Test-Path $gitignore) {
 # ---------- parity check ----------
 
 Write-Host ''
-Write-Info 'verifying parity...'
-$pairs = @(
-    @{ Claude = '.claude\agents\working-memory-synchronizer.md'; Copilot = '.github\agents\working-memory-synchronizer.agent.md' }
+Write-Info 'verifying canonical artifacts...'
+$canonical = @(
+    '.claude\agents\working-memory-synchronizer.md',
+    '.claude\skills\update-working-memory\SKILL.md'
 )
-$parityOk = $true
-foreach ($p in $pairs) {
-    if ((Test-Path $p.Claude) -and (Test-Path $p.Copilot)) {
-        Write-Ok "parity: $($p.Claude) <-> $($p.Copilot)"
+$canonicalOk = $true
+foreach ($f in $canonical) {
+    if (Test-Path $f) {
+        Write-Ok "present: $f"
     } else {
-        Write-Warn "parity miss: $($p.Claude) or $($p.Copilot) is absent"
-        $parityOk = $false
+        Write-Warn "missing: $f"
+        $canonicalOk = $false
     }
 }
 
@@ -320,7 +322,7 @@ Write-Host '     run: .\scripts\update-working-memory.ps1'
 Write-Host '  5. To tune line limits or nudge thresholds:'
 Write-Host '       Copy-Item .working-memoryrc.example .working-memoryrc   # then edit'
 
-if (-not $parityOk) {
+if (-not $canonicalOk) {
     Write-Host ''
-    Write-Warn 'some parity checks failed. Review the messages above.'
+    Write-Warn 'some canonical artifacts are missing. Review the messages above.'
 }

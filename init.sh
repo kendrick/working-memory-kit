@@ -245,10 +245,13 @@ append_section_if_missing \
 
 # ---------- Claude Code config ----------
 
-mkdir -p "$TARGET_DIR/.claude/agents"
+mkdir -p "$TARGET_DIR/.claude/agents" "$TARGET_DIR/.claude/skills/update-working-memory"
 copy_if_absent \
   "$TEMPLATE/.claude/agents/working-memory-synchronizer.md" \
   "$TARGET_DIR/.claude/agents/working-memory-synchronizer.md"
+copy_if_absent \
+  "$TEMPLATE/.claude/skills/update-working-memory/SKILL.md" \
+  "$TARGET_DIR/.claude/skills/update-working-memory/SKILL.md"
 
 CLAUDE_SECTION=$(mktemp)
 cat > "$CLAUDE_SECTION" <<'EOF'
@@ -265,18 +268,8 @@ rm -f "$CLAUDE_SECTION"
 # ---------- Copilot config ----------
 
 mkdir -p \
-  "$TARGET_DIR/.github/agents" \
-  "$TARGET_DIR/.github/skills/update-working-memory" \
   "$TARGET_DIR/.github/hooks" \
   "$TARGET_DIR/.github/instructions"
-
-copy_if_absent \
-  "$TEMPLATE/.github/agents/working-memory-synchronizer.agent.md" \
-  "$TARGET_DIR/.github/agents/working-memory-synchronizer.agent.md"
-
-copy_if_absent \
-  "$TEMPLATE/.github/skills/update-working-memory/SKILL.md" \
-  "$TARGET_DIR/.github/skills/update-working-memory/SKILL.md"
 
 copy_if_absent \
   "$TEMPLATE/.github/hooks/working-memory-hooks.json" \
@@ -321,18 +314,17 @@ fi
 # ---------- parity check ----------
 
 say ""
-info "verifying parity..."
-PARITY_OK=1
-for pair in \
-  ".claude/agents/working-memory-synchronizer.md|.github/agents/working-memory-synchronizer.agent.md"
+info "verifying canonical artifacts..."
+CANONICAL_OK=1
+for f in \
+  ".claude/agents/working-memory-synchronizer.md" \
+  ".claude/skills/update-working-memory/SKILL.md"
 do
-  CLAUDE_F="${pair%%|*}"
-  COPILOT_F="${pair##*|}"
-  if [ -f "$TARGET_DIR/$CLAUDE_F" ] && [ -f "$TARGET_DIR/$COPILOT_F" ]; then
-    ok "parity: $CLAUDE_F <-> $COPILOT_F"
+  if [ -f "$TARGET_DIR/$f" ]; then
+    ok "present: $f"
   else
-    warn "parity miss: $CLAUDE_F or $COPILOT_F is absent"
-    PARITY_OK=0
+    warn "missing: $f"
+    CANONICAL_OK=0
   fi
 done
 
@@ -351,7 +343,7 @@ say "     run: ./scripts/update-working-memory.sh"
 say "  5. To tune line limits or nudge thresholds:"
 say "       cp .working-memoryrc.example .working-memoryrc   # then edit"
 
-if [ "$PARITY_OK" -eq 0 ]; then
+if [ "$CANONICAL_OK" -eq 0 ]; then
   say ""
-  warn "some parity checks failed. Review the messages above."
+  warn "some canonical artifacts are missing. Review the messages above."
 fi
