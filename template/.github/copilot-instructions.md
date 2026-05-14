@@ -2,10 +2,10 @@
 
 ## Working Memory
 
-This project maintains a two-tier working memory at `working-memory/` for cross-session context.
+This project maintains a two-tier working memory at `_working-memory/` for cross-session context.
 
 ### Always read on session start:
-- `working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only)
+- `_working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only)
 
 ### Read on demand:
 | File | Read when... |

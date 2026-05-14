@@ -6,7 +6,7 @@ Works with Claude Code and GitHub Copilot. Greenfield or brownfield. Installs wi
 
 ## The problem
 
-AI coding agents lose context when a session ends. Asking them to re-derive your project's conventions, decisions, and constraints from raw source on every new conversation takes time, wastes tokens and produces inconsistent answers.
+AI coding agents lose context when a session ends. Asking them to re-derive a project's conventions and constraints from raw source on every new conversation burns time and tokens, and the answers drift between sessions.
 
 Cramming everything into a single `AGENTS.md` or `CLAUDE.md` doesn't scale either. Agents read those on session start, so every kB you add gets paid for by your context window for the rest of the session, whether the information is needed or not.
 
@@ -15,7 +15,7 @@ Cramming everything into a single `AGENTS.md` or `CLAUDE.md` doesn't scale eithe
 Two tiers, both at the project root:
 
 ```
-working-memory/
+_working-memory/
 ├── activeContext.md       # always read on session start (ideally ≤20 lines, gitignored)
 ├── projectOverview.md     # read on demand
 ├── decisionLog.md
@@ -38,9 +38,7 @@ irm https://raw.githubusercontent.com/kendrick/working-memory-kit/main/init.ps1 
 
 Replace `kendrick` with the GitHub org or wherever this repo is hosted.
 
-The installer **detects your stack, prompts before overwriting anything, and drops the following** into your project:
-
-- `working-memory/` with six templates
+- `_working-memory/` with six templates
 - `AGENTS.md` (creates one, or appends a section to your existing file)
 - `.claude/agents/working-memory-synchronizer.md` and `.claude/skills/update-working-memory/` (read by both Claude Code and VS Code Copilot)
 - `.github/hooks/working-memory-hooks.json` and `.github/instructions/data-layer.instructions.md` if your project uses GitHub Copilot (these formats are Copilot-specific)
@@ -48,9 +46,7 @@ The installer **detects your stack, prompts before overwriting anything, and dro
 - `scripts/` with cross-platform `.sh` and `.ps1` hooks
 - `.working-memoryrc.example` for tuning thresholds
 
-It also adds `working-memory/activeContext.md` to `.gitignore`. `activeContext` is meant to be per-developer, not per-team.
-
-Prefer not to install via curl-pipe? Clone the repo and run `./init.sh` from inside your project directory, or use `npx degit kendrick/working-memory-kit/template` to drop the template files in directly without the interactive installer.
+It also adds `_working-memory/activeContext.md` to `.gitignore`. `activeContext` is meant to be per-developer, not per-team.
 
 ## How it works
 
@@ -99,7 +95,7 @@ Five files **or** two hundred lines for the nudge because the two signals catch 
 
 ## Compatibility
 
-The kit puts shared artifacts at the single canonical location both tools natively read. Claude Code and VS Code Copilot both read `.claude/agents/working-memory-synchronizer.md` and `.claude/skills/update-working-memory/SKILL.md`. Copilot-only formats — hooks at `.github/hooks/working-memory-hooks.json` (VS Code schema) and path-scoped instructions at `.github/instructions/*.instructions.md` — stay under `.github/`. Any agent that respects `AGENTS.md` will pick up the on-demand table.
+The kit puts shared artifacts at the one canonical location both tools natively read. Claude Code and VS Code Copilot both read `.claude/agents/working-memory-synchronizer.md` and `.claude/skills/update-working-memory/SKILL.md`. Copilot-only formats stay under `.github/`: hooks at `.github/hooks/working-memory-hooks.json` (VS Code schema), and path-scoped instructions at `.github/instructions/*.instructions.md`. Any agent that respects `AGENTS.md` will pick up the on-demand table.
 
 The hooks JSON uses VS Code's schema (`SessionStart` / `Stop`, `command` with a `windows` override, `timeout`) since `.github/hooks/*.json` is a VS Code workspace path. GitHub Copilot Cloud Agent uses a different hooks schema; if you need both, you'll need a second hook file.
 
@@ -126,7 +122,7 @@ working-memory-kit/
 ├── examples/
 │   └── hydration-demo/      # Synthesized codebase for demoing the pipeline
 ├── template/                # Files copied into the consumer's project
-│   ├── working-memory/
+│   ├── _working-memory/
 │   ├── AGENTS.md
 │   ├── .claude/{agents,skills}/
 │   ├── .github/{copilot-instructions.md,hooks,instructions}/

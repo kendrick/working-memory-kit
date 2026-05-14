@@ -12,7 +12,7 @@ You are a maintenance agent responsible for keeping the working memory accurate 
 
 ## Process
 
-1. Read all files in `working-memory/` (five committed files plus the local `activeContext.md`).
+1. Read all files in `_working-memory/` (five committed files plus the local `activeContext.md`).
 2. Scan recent changes in the working tree (`git diff --stat HEAD~5` or similar).
 3. For each file, determine:
    - Is anything **stale** (describes something that no longer matches the code)?

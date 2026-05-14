@@ -7,13 +7,13 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (git rev-parse --show-toplevel 2>$null)
 if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
 
-$wmDir = Join-Path $repoRoot 'working-memory'
+$wmDir = Join-Path $repoRoot '_working-memory'
 
 Write-Host "=== Working Memory Status ===" -ForegroundColor Cyan
 Write-Host ""
 
 if (-not (Test-Path $wmDir)) {
-    Write-Host "No working-memory/ directory found at $repoRoot." -ForegroundColor Yellow
+    Write-Host "No _working-memory/ directory found at $repoRoot." -ForegroundColor Yellow
     Write-Host "Run the working-memory-kit installer to scaffold one."
     exit 1
 }
@@ -49,7 +49,7 @@ if (Test-Path $activeContext) {
     $lines = (Get-Content $activeContext | Where-Object { $_.Trim() -ne '' }).Count
     Write-Host "activeContext.md: $lines non-empty lines (limit: $maxLines)"
 } else {
-    Write-Host "activeContext.md: MISSING — run: Copy-Item working-memory\activeContext.example.md working-memory\activeContext.md" -ForegroundColor Yellow
+    Write-Host "activeContext.md: MISSING — run: Copy-Item _working-memory\activeContext.example.md _working-memory\activeContext.md" -ForegroundColor Yellow
 }
 
 # Last modified times

@@ -18,8 +18,8 @@ When this skill is activated:
    - **ADRs (if present):** `docs/adrs/`, `docs/decisions/`
    - **Recent git history:** `git log --since="180 days ago" --pretty=format:"%h %s"`
    - **Configuration:** `tsconfig.json`, `.eslintrc.json`, `pyproject.toml`, etc.
-2. Note any working memory that already exists at `working-memory/` so reconcile can use it later.
-3. Mark sources outside the repo (Notion, Slack, ADO) as "out of scope for automated extraction"; flag them rather than skipping silently.
+2. Note any working memory that already exists at `_working-memory/` so reconcile can use it later.
+3. Mark sources outside the repo (Notion, Slack, ADO) as "out of scope for automated extraction". Flag them, don't skip silently.
 
 ## Output
 

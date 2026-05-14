@@ -5,7 +5,7 @@
 set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-WM_DIR="$REPO_ROOT/working-memory"
+WM_DIR="$REPO_ROOT/_working-memory"
 
 # Hooks fire on every session in every project, not just working-memory
 # consumers. Bail quietly so unrelated repos don't see noise.
@@ -29,7 +29,7 @@ MAX_LINES="${WORKING_MEMORY_MAX_LINES:-$(read_cfg MAX_ACTIVE_CONTEXT_LINES 20)}"
 if [ ! -f "$WM_DIR/activeContext.md" ]; then
   if [ -f "$WM_DIR/activeContext.example.md" ]; then
     cp "$WM_DIR/activeContext.example.md" "$WM_DIR/activeContext.md"
-    echo '{"systemMessage":"Created working-memory/activeContext.md from template. Update it with your current focus."}'
+    echo '{"systemMessage":"Created _working-memory/activeContext.md from template. Update it with your current focus."}'
   else
     echo '{"systemMessage":"No activeContext.example.md found. Working memory may not be initialized."}'
   fi

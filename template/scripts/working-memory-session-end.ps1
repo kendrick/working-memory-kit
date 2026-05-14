@@ -7,7 +7,7 @@ if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
 
 # Hooks fire on every session in every project. Skip silently outside
 # working-memory consumers.
-if (-not (Test-Path (Join-Path $repoRoot 'working-memory'))) { exit 0 }
+if (-not (Test-Path (Join-Path $repoRoot '_working-memory'))) { exit 0 }
 
 # Reads a key from .working-memoryrc with a default. Parses key=value instead
 # of dot-sourcing, so a malicious rc can't execute arbitrary code.

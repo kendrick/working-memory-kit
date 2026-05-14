@@ -160,10 +160,33 @@ else
   info "no recognized stack detected (no package.json/pyproject.toml/Cargo.toml/go.mod/Gemfile)"
 fi
 
+# ---------- working-memory directory choice ----------
+
+# Default is _working-memory (underscore prefix keeps it grouped near
+# similarly-prefixed tooling directories at the top of file listings).
+# Consumer can override at install time; on override, the installer
+# substitutes the literal token in copied template files.
+WM_DIR_DEFAULT="_working-memory"
+WM_DIR="$WM_DIR_DEFAULT"
+printf "Install working memory at %s/? [Y/n, or specify alternate path] " "$WM_DIR_DEFAULT"
+read -r wm_reply
+case "$wm_reply" in
+  ""|y|Y|yes|YES) ;;
+  n|N|no|NO)
+    printf "Enter alternate path (relative to repo root): "
+    read -r wm_custom
+    if [ -n "$wm_custom" ]; then
+      WM_DIR="${wm_custom%/}"
+    fi
+    ;;
+  *) WM_DIR="${wm_reply%/}" ;;
+esac
+info "working memory will be installed at $WM_DIR/"
+
 # ---------- check existing structure ----------
 
 EXISTING=()
-[ -d "$TARGET_DIR/working-memory" ] && EXISTING+=("working-memory/")
+[ -d "$TARGET_DIR/$WM_DIR" ] && EXISTING+=("$WM_DIR/")
 [ -d "$TARGET_DIR/.claude" ] && EXISTING+=(".claude/")
 [ -d "$TARGET_DIR/.github" ] && EXISTING+=(".github/")
 [ -f "$TARGET_DIR/AGENTS.md" ] && EXISTING+=("AGENTS.md")
@@ -183,20 +206,20 @@ info "scaffolding..."
 
 # ---------- working-memory ----------
 
-mkdir -p "$TARGET_DIR/working-memory"
+mkdir -p "$TARGET_DIR/$WM_DIR"
 for f in activeContext.example.md projectOverview.md decisionLog.md dataContracts.md conventions.md openQuestions.md; do
-  copy_if_absent "$TEMPLATE/working-memory/$f" "$TARGET_DIR/working-memory/$f"
+  copy_if_absent "$TEMPLATE/_working-memory/$f" "$TARGET_DIR/$WM_DIR/$f"
 done
 
 # Each developer gets their own activeContext.md.
-if [ ! -f "$TARGET_DIR/working-memory/activeContext.md" ]; then
-  cp "$TARGET_DIR/working-memory/activeContext.example.md" "$TARGET_DIR/working-memory/activeContext.md"
-  ok "created your local working-memory/activeContext.md from the template"
+if [ ! -f "$TARGET_DIR/$WM_DIR/activeContext.md" ]; then
+  cp "$TARGET_DIR/$WM_DIR/activeContext.example.md" "$TARGET_DIR/$WM_DIR/activeContext.md"
+  ok "created your local $WM_DIR/activeContext.md from the template"
 fi
 
 # Skip pre-population if the placeholder marker is gone: the team has filled
 # in their overview by hand and we shouldn't clobber it on re-run.
-if [ -n "$DETECTED_LANG" ] && grep -q "^_To be filled._" "$TARGET_DIR/working-memory/projectOverview.md" 2>/dev/null; then
+if [ -n "$DETECTED_LANG" ] && grep -q "^_To be filled._" "$TARGET_DIR/$WM_DIR/projectOverview.md" 2>/dev/null; then
   TMP_OVERVIEW=$(mktemp)
   REPO_NAME="$(basename "$TARGET_DIR")"
   cat > "$TMP_OVERVIEW" <<EOF
@@ -223,8 +246,8 @@ $(ls -d */ 2>/dev/null | head -20 | sed 's|/$||' | sed 's|^|- |')
 <!-- Non-obvious things an agent must know: monorepo rules, legacy code -->
 <!-- boundaries, API version requirements, browser support, etc. -->
 EOF
-  mv "$TMP_OVERVIEW" "$TARGET_DIR/working-memory/projectOverview.md"
-  ok "pre-populated working-memory/projectOverview.md with detected stack"
+  mv "$TMP_OVERVIEW" "$TARGET_DIR/$WM_DIR/projectOverview.md"
+  ok "pre-populated $WM_DIR/projectOverview.md with detected stack"
 fi
 
 # ---------- .working-memoryrc.example ----------
@@ -258,7 +281,7 @@ cat > "$CLAUDE_SECTION" <<'EOF'
 
 ## Working Memory
 
-On session start, always read `working-memory/activeContext.md`.
+On session start, always read `_working-memory/activeContext.md`.
 Read other working memory files as directed by the table in `AGENTS.md`.
 After significant work, run the working-memory-synchronizer agent or manually update active context.
 EOF
@@ -298,7 +321,7 @@ ok "marked scripts/*.sh executable"
 # ---------- gitignore ----------
 
 GITIGNORE="$TARGET_DIR/.gitignore"
-GIT_LINE="working-memory/activeContext.md"
+GIT_LINE="$WM_DIR/activeContext.md"
 if [ -f "$GITIGNORE" ]; then
   if grep -qxF "$GIT_LINE" "$GITIGNORE"; then
     info ".gitignore already excludes activeContext.md"
@@ -309,6 +332,39 @@ if [ -f "$GITIGNORE" ]; then
 else
   printf "# Local-only active context (working-memory-kit)\n%s\n" "$GIT_LINE" > "$GITIGNORE"
   ok "created .gitignore with activeContext.md entry"
+fi
+
+# ---------- substitute WM_DIR token in copied files if user overrode default ----------
+
+if [ "$WM_DIR" != "$WM_DIR_DEFAULT" ]; then
+  info "substituting _working-memory -> $WM_DIR in copied template files"
+  for f in \
+    "AGENTS.md" \
+    "CLAUDE.md" \
+    ".claude/agents/working-memory-synchronizer.md" \
+    ".claude/skills/update-working-memory/SKILL.md" \
+    ".github/copilot-instructions.md" \
+    ".github/instructions/data-layer.instructions.md" \
+    "scripts/working-memory-session-start.sh" \
+    "scripts/working-memory-session-end.sh" \
+    "scripts/update-working-memory.sh" \
+    "scripts/working-memory-session-start.ps1" \
+    "scripts/working-memory-session-end.ps1" \
+    "scripts/update-working-memory.ps1"
+  do
+    full="$TARGET_DIR/$f"
+    if [ -f "$full" ]; then
+      # BSD/GNU compatible: use -i with a backup extension, then drop the backup.
+      # Single broad pattern catches every form: trailing slash, backslash,
+      # closing quote in scripts (WM_DIR="$REPO_ROOT/_working-memory"), end of
+      # line, etc. The token "_working-memory" only ever appears as the install
+      # path; script filenames use "working-memory-" (no underscore prefix),
+      # env vars use WORKING_MEMORY_*, and the rc file is .working-memoryrc.
+      # None collide.
+      sed -i.bak "s|_working-memory|$WM_DIR|g" "$full"
+      rm -f "$full.bak"
+    fi
+  done
 fi
 
 # ---------- parity check ----------
@@ -334,10 +390,10 @@ say ""
 say "$(c_green "done.")"
 say ""
 say "next steps:"
-say "  1. Open working-memory/projectOverview.md and fill in 'What This Is'."
-say "  2. Edit working-memory/activeContext.md to reflect what you're working on."
+say "  1. Open $WM_DIR/projectOverview.md and fill in 'What This Is'."
+say "  2. Edit $WM_DIR/activeContext.md to reflect what you're working on."
 say "  3. Teammates: after cloning, run:"
-say "       cp working-memory/activeContext.example.md working-memory/activeContext.md"
+say "       cp $WM_DIR/activeContext.example.md $WM_DIR/activeContext.md"
 say "  4. To sync working memory: invoke the working-memory-synchronizer agent, or"
 say "     run: ./scripts/update-working-memory.sh"
 say "  5. To tune line limits or nudge thresholds:"

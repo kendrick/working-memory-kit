@@ -145,10 +145,27 @@ if ($Stack.Language) {
     Write-Info "no recognized stack detected"
 }
 
+# ---------- working-memory directory choice ----------
+
+# Default is _working-memory (underscore prefix keeps it grouped near
+# similarly-prefixed tooling directories at the top of file listings).
+# Consumer can override at install time; on override, the installer
+# substitutes the literal token in copied template files.
+$WmDirDefault = '_working-memory'
+$WmDir = $WmDirDefault
+$reply = Read-Host "Install working memory at $WmDirDefault/? [Y/n, or specify alternate path]"
+if ($reply -match '^(n|no)$') {
+    $custom = Read-Host 'Enter alternate path (relative to repo root)'
+    if ($custom) { $WmDir = $custom.TrimEnd('/').TrimEnd('\') }
+} elseif ($reply -and $reply -notmatch '^(y|yes)$') {
+    $WmDir = $reply.TrimEnd('/').TrimEnd('\')
+}
+Write-Info "working memory will be installed at $WmDir/"
+
 # ---------- check existing structure ----------
 
 $Existing = @()
-if (Test-Path 'working-memory') { $Existing += 'working-memory/' }
+if (Test-Path $WmDir) { $Existing += "$WmDir/" }
 if (Test-Path '.claude')     { $Existing += '.claude/' }
 if (Test-Path '.github')     { $Existing += '.github/' }
 if (Test-Path 'AGENTS.md')   { $Existing += 'AGENTS.md' }
@@ -165,20 +182,20 @@ Write-Info 'scaffolding...'
 
 # ---------- working-memory ----------
 
-if (-not (Test-Path 'working-memory')) { New-Item -ItemType Directory -Path 'working-memory' | Out-Null }
+if (-not (Test-Path $WmDir)) { New-Item -ItemType Directory -Path $WmDir | Out-Null }
 $wmFiles = @('activeContext.example.md','projectOverview.md','decisionLog.md','dataContracts.md','conventions.md','openQuestions.md')
 foreach ($f in $wmFiles) {
-    Copy-IfAbsent (Join-Path $Template "working-memory\$f") (Join-Path $TargetDir "working-memory\$f")
+    Copy-IfAbsent (Join-Path $Template "_working-memory\$f") (Join-Path $TargetDir "$WmDir\$f")
 }
 
-if (-not (Test-Path 'working-memory\activeContext.md')) {
-    Copy-Item 'working-memory\activeContext.example.md' 'working-memory\activeContext.md'
-    Write-Ok 'created your local working-memory/activeContext.md from the template'
+if (-not (Test-Path "$WmDir\activeContext.md")) {
+    Copy-Item "$WmDir\activeContext.example.md" "$WmDir\activeContext.md"
+    Write-Ok "created your local $WmDir/activeContext.md from the template"
 }
 
 # Skip pre-population if the placeholder marker is gone: the team has filled
 # in their overview by hand and we shouldn't clobber it on re-run.
-if ($Stack.Language -and (Get-Content 'working-memory\projectOverview.md' -Raw) -match '^_To be filled\._') {
+if ($Stack.Language -and (Get-Content "$WmDir\projectOverview.md" -Raw) -match '^_To be filled\._') {
     $repoName = Split-Path $TargetDir -Leaf
     $dirs = (Get-ChildItem -Directory | Select-Object -First 20 | ForEach-Object { "- $($_.Name)" }) -join "`n"
     $fwLine = if ($Stack.Framework) { $Stack.Framework } else { '_(none detected)_' }
@@ -206,8 +223,8 @@ $dirs
 <!-- Non-obvious things an agent must know: monorepo rules, legacy code -->
 <!-- boundaries, API version requirements, browser support, etc. -->
 "@
-    Set-Content -Path 'working-memory\projectOverview.md' -Value $overview
-    Write-Ok 'pre-populated working-memory/projectOverview.md with detected stack'
+    Set-Content -Path "$WmDir\projectOverview.md" -Value $overview
+    Write-Ok "pre-populated $WmDir/projectOverview.md with detected stack"
 }
 
 # ---------- .working-memoryrc.example ----------
@@ -239,7 +256,7 @@ $claudeSection = @'
 
 ## Working Memory
 
-On session start, always read `working-memory/activeContext.md`.
+On session start, always read `_working-memory/activeContext.md`.
 Read other working memory files as directed by the table in `AGENTS.md`.
 After significant work, run the working-memory-synchronizer agent or manually update active context.
 '@
@@ -275,7 +292,7 @@ Write-Info 'shell scripts: PowerShell does not need chmod. On Unix systems, run:
 # ---------- gitignore ----------
 
 $gitignore = '.gitignore'
-$line = 'working-memory/activeContext.md'
+$line = "$WmDir/activeContext.md"
 if (Test-Path $gitignore) {
     $content = Get-Content $gitignore
     if ($content -contains $line) {
@@ -287,6 +304,38 @@ if (Test-Path $gitignore) {
 } else {
     Set-Content $gitignore "# Local-only active context (working-memory-kit)`n$line"
     Write-Ok 'created .gitignore with activeContext.md entry'
+}
+
+# ---------- substitute WmDir token in copied files if user overrode default ----------
+
+if ($WmDir -ne $WmDirDefault) {
+    Write-Info "substituting _working-memory -> $WmDir in copied template files"
+    $filesToSub = @(
+        'AGENTS.md',
+        'CLAUDE.md',
+        '.claude\agents\working-memory-synchronizer.md',
+        '.claude\skills\update-working-memory\SKILL.md',
+        '.github\copilot-instructions.md',
+        '.github\instructions\data-layer.instructions.md',
+        'scripts\working-memory-session-start.sh',
+        'scripts\working-memory-session-end.sh',
+        'scripts\update-working-memory.sh',
+        'scripts\working-memory-session-start.ps1',
+        'scripts\working-memory-session-end.ps1',
+        'scripts\update-working-memory.ps1'
+    )
+    foreach ($f in $filesToSub) {
+        $full = Join-Path $TargetDir $f
+        if (Test-Path $full) {
+            $content = Get-Content $full -Raw
+            # Single broad pattern catches every form: trailing slash, backslash,
+            # closing quote in scripts, end of line. The token "_working-memory"
+            # only ever appears as the install path; script filenames, env vars,
+            # and .working-memoryrc do not collide.
+            $content = $content -replace '_working-memory', $WmDir
+            Set-Content -Path $full -Value $content -NoNewline
+        }
+    }
 }
 
 # ---------- parity check ----------
@@ -313,10 +362,10 @@ Write-Host ''
 Write-Host 'done.' -ForegroundColor Green
 Write-Host ''
 Write-Host 'next steps:'
-Write-Host '  1. Open working-memory\projectOverview.md and fill in "What This Is".'
-Write-Host '  2. Edit working-memory\activeContext.md to reflect what you''re working on.'
+Write-Host "  1. Open $WmDir\projectOverview.md and fill in `"What This Is`"."
+Write-Host "  2. Edit $WmDir\activeContext.md to reflect what you're working on."
 Write-Host '  3. Teammates: after cloning, run:'
-Write-Host '       Copy-Item working-memory\activeContext.example.md working-memory\activeContext.md'
+Write-Host "       Copy-Item $WmDir\activeContext.example.md $WmDir\activeContext.md"
 Write-Host '  4. To sync working memory: invoke the working-memory-synchronizer agent, or'
 Write-Host '     run: .\scripts\update-working-memory.ps1'
 Write-Host '  5. To tune line limits or nudge thresholds:'

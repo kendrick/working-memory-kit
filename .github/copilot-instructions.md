@@ -1,6 +1,6 @@
 # Copilot Instructions — working-memory-kit
 
-The full agent context for contributing to this kit lives in [`CLAUDE.md`](../CLAUDE.md) at the repo root. That file is the single source of truth and is auto-detected by VS Code Copilot when `chat.useClaudeMdFile` is enabled[^vs-code-claude-md], but this file ensures the instructions load regardless of that setting.
+The agent context for contributing to this kit lives in [`CLAUDE.md`](../CLAUDE.md) at the repo root. VS Code Copilot picks up `CLAUDE.md` automatically when `chat.useClaudeMdFile` is on[^vs-code-claude-md]. This file is the backstop in case that setting is off.
 
 Read `CLAUDE.md` before doing any non-trivial work in this repo.
 

@@ -10,8 +10,8 @@ description: >
 
 When this skill is activated, perform the following:
 
-1. Read `working-memory/activeContext.md` (local, may not exist yet — if missing, create from `activeContext.example.md`).
-2. Read all other files in `working-memory/`.
+1. Read `_working-memory/activeContext.md` (local, may not exist yet — if missing, create from `activeContext.example.md`).
+2. Read all other files in `_working-memory/`.
 3. Run `git diff --stat HEAD~5` to identify recent changes.
 4. For each working memory file, determine if anything is stale or missing.
 5. Enforce the 20-line hard limit on `activeContext.md` — evict completed items to `decisionLog.md`.

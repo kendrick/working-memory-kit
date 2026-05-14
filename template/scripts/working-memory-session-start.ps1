@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (git rev-parse --show-toplevel 2>$null)
 if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
 
-$wmDir = Join-Path $repoRoot 'working-memory'
+$wmDir = Join-Path $repoRoot '_working-memory'
 
 # Hooks fire on every session in every project, not just working-memory
 # consumers. Bail quietly so unrelated repos don't see noise.
@@ -33,7 +33,7 @@ $exampleFile = Join-Path $wmDir 'activeContext.example.md'
 if (-not (Test-Path $activeContext)) {
     if (Test-Path $exampleFile) {
         Copy-Item $exampleFile $activeContext
-        Write-Output '{"systemMessage":"Created working-memory/activeContext.md from template. Update it with your current focus."}'
+        Write-Output '{"systemMessage":"Created _working-memory/activeContext.md from template. Update it with your current focus."}'
     } else {
         Write-Output '{"systemMessage":"No activeContext.example.md found. Working memory may not be initialized."}'
     }

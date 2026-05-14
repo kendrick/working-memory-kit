@@ -7,7 +7,7 @@ last_updated: 2026-05-08
 
 The [scaffold prompt](../scaffold-prompt.md) installs the working memory structure and pre-populates the easy parts (stack, build commands, repository structure). This page covers the deeper job: scanning the codebase, recent git history, and existing project docs to fill the working memory with content an agent will actually use across sessions.
 
-The shape is five phases, run as a sequence of skills or as one combined agent depending on tooling. Each phase has a clear input and output; human review sits at the propose step before any working memory file is written.
+The shape is five phases, run as a sequence of skills or as one combined agent depending on tooling. Each phase has a clear input and output. Human review sits at the propose step before any working memory file is written.
 
 ## Where AI Helps, and Where It Doesn't
 
@@ -36,7 +36,7 @@ Five phases. The memory-bank kit's last phase (verify) doesn't apply here; worki
 | **4. reconcile** | Drafts + existing working memory state | Annotated: net-new, would-overwrite, conflicts-with-code                                                     |
 | **5. propose**   | Reconciled drafts                      | Staged commit, or PR for multi-developer projects, for human review                                          |
 
-Reference skills live in [`.claude/skills/`](../.claude/skills/). Each is a single `SKILL.md` invocable as a project skill by both VS Code Copilot and Claude Code from that canonical location[^cross-tool-skills]. A composite [`hydrator`](../.claude/agents/hydrator.md) agent at `.claude/agents/hydrator.md` orchestrates all five phases with the discipline rules enforced; both tools read it natively. Invoke as `@hydrator` to run the full pipeline.
+Reference skills live in [`.claude/skills/`](../.claude/skills/). Each is a single `SKILL.md`, invocable as a project skill by both VS Code Copilot and Claude Code from that one location[^cross-tool-skills]. The composite [`hydrator`](../.claude/agents/hydrator.md) agent at `.claude/agents/hydrator.md` runs all five phases with the discipline rules enforced. Both tools read it natively. Invoke as `@hydrator` to run the full pipeline.
 
 ### 1. discover
 
@@ -86,7 +86,7 @@ For greenfield projects, reconcile is trivial: every draft is net-new.
 
 Surface drafts for human review. Standard mechanism: a single commit (or PR for multi-developer projects) that updates the relevant working memory files in a reviewable batch. `activeContext.md` is excluded; the developer drives that file by hand.
 
-After acceptance, the synchronizer agent (`@working-memory-synchronizer` in Claude Code, `/update-working-memory` in Copilot) takes over for ongoing maintenance. Hydration is the one-shot or periodic deeper job; synchronization is the continuous sweep.
+After acceptance, the `working-memory-synchronizer` agent (or `/update-working-memory`, which invokes the same skill in either Claude Code or Copilot) takes over for ongoing maintenance. Hydration is the one-time or periodic deeper job. Synchronization is the continuous sweep.
 
 ## The Bridge to Memory Bank
 

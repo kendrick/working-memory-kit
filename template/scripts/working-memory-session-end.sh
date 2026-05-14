@@ -7,7 +7,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # Hooks fire on every session in every project. Skip silently outside
 # working-memory consumers.
-if [ ! -d "$REPO_ROOT/working-memory" ]; then
+if [ ! -d "$REPO_ROOT/_working-memory" ]; then
   exit 0
 fi
 

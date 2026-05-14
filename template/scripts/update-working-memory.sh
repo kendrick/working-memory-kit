@@ -6,13 +6,13 @@
 set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-WM_DIR="$REPO_ROOT/working-memory"
+WM_DIR="$REPO_ROOT/_working-memory"
 
 echo "=== Working Memory Status ==="
 echo ""
 
 if [ ! -d "$WM_DIR" ]; then
-  echo "No working-memory/ directory found at $REPO_ROOT."
+  echo "No _working-memory/ directory found at $REPO_ROOT."
   echo "Run the working-memory-kit installer to scaffold one."
   exit 1
 fi
@@ -43,7 +43,7 @@ if [ -f "$WM_DIR/activeContext.md" ]; then
   LINES=$(grep -c '[^[:space:]]' "$WM_DIR/activeContext.md" || echo 0)
   echo "activeContext.md: $LINES non-empty lines (limit: $MAX_LINES)"
 else
-  echo "activeContext.md: MISSING — run: cp working-memory/activeContext.example.md working-memory/activeContext.md"
+  echo "activeContext.md: MISSING — run: cp _working-memory/activeContext.example.md _working-memory/activeContext.md"
 fi
 
 # Last modified times

@@ -4,7 +4,7 @@
 >
 > **Works on:** Greenfield or brownfield projects. The scaffold detects existing structure and adapts.
 >
-> **For deeper hydration:** This prompt installs the structure and pre-populates obvious stack/structure facts. For a richer one-time content hydration that scans the codebase, recent git history, and existing docs, see [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md) after the scaffold completes.
+> **For deeper hydration:** This prompt installs the structure and pre-populates obvious stack/structure facts. For a richer one-time content hydration that scans the codebase plus existing docs and git history, see [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md) after the scaffold completes.
 
 ---
 
@@ -39,7 +39,7 @@ working-memory-kit/
 ├── init.ps1                 # Windows installer
 ├── scaffold-prompt.md       # This file
 └── template/                # What gets copied into the consumer's project
-    ├── working-memory/
+    ├── _working-memory/
     │   ├── activeContext.example.md
     │   ├── projectOverview.md
     │   ├── decisionLog.md
@@ -70,11 +70,11 @@ working-memory-kit/
 
 The `init.sh` (macOS/Linux) and `init.ps1` (Windows) installers should:
 
-1. Check for existing `working-memory/`, `.claude/`, `.github/` directories
+1. Check for existing `_working-memory/`, `.claude/`, `.github/` directories
 2. Prompt before overwriting anything
 3. Merge into existing `copilot-instructions.md`, `AGENTS.md`, or `CLAUDE.md` if present
 4. Copy `activeContext.example.md` → `activeContext.md` for the installing developer
-5. Append `working-memory/activeContext.md` to `.gitignore`
+5. Append `_working-memory/activeContext.md` to `.gitignore`
 6. Mark `.sh` scripts as executable (macOS/Linux only)
 7. Run a quick project scan and pre-populate `projectOverview.md` with detected stack info
 8. Verify parity: confirm that both Claude Code and Copilot configurations were created
@@ -89,7 +89,7 @@ Paste everything below this line into your agent.
 
 You are scaffolding a **two-tier working memory** into this project. The working memory gives AI agents persistent awareness of project state across sessions without bloating context on every turn.
 
-> **Implementation note:** Before creating Copilot-readable files (`.claude/agents/`, `.claude/skills/`, `.github/copilot-instructions.md`, `.github/hooks/`, `.github/instructions/`), search the web for the latest GitHub Copilot documentation on custom agents, agent skills, hooks, and instructions to verify that file formats, frontmatter schemas, and directory conventions have not changed. Key docs to check:
+> **Implementation note:** Before creating Copilot-readable files (`.claude/agents/`, `.claude/skills/`, `.github/copilot-instructions.md`, `.github/hooks/`, `.github/instructions/`), search the web for the latest GitHub Copilot documentation on custom agents, agent skills, hooks, and instructions. Confirm that file formats, frontmatter schemas, and directory conventions haven't shifted since this prompt was written. Key docs to check:
 > - https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/create-custom-agents
 > - https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills
 > - https://docs.github.com/en/copilot/reference/hooks-configuration
@@ -103,24 +103,24 @@ Before creating anything, scan the project root for:
 
 - `package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, or similar (detect stack)
 - Existing `AGENTS.md`, `CLAUDE.md`, `COPILOT.md`, `.github/copilot-instructions.md`
-- Existing `working-memory/` directory
+- Existing `_working-memory/` directory
 - `.claude/agents/` directory and any existing custom agent definitions (read by both Claude Code and VS Code Copilot)
 - `.claude/skills/` directory and any existing `SKILL.md` files (read by both tools)
 - `.github/hooks/` directory and any existing hook configurations
 - `.github/instructions/` directory and any path-specific instruction files
 - Source directory structure (src/, app/, lib/, etc.)
 - Build/test/lint commands in package.json scripts, Makefile, etc.
-- **Operating system** — detect whether the environment is macOS/Linux or Windows to determine which script variants to create (`.sh` vs `.ps1`). Create both by default if the OS is unknown or if the project is shared across platforms.
+- Operating system: detect whether the environment is macOS/Linux or Windows to decide which script variants to create (`.sh` vs `.ps1`). Create both by default if the OS is unknown or if the project is shared across platforms.
 
 Report what you found before proceeding. If a working memory already exists, ask whether to reset or merge.
 
 ### Step 2 — Create the working memory directory
 
-Create `working-memory/` at the project root with these six files:
+Create `_working-memory/` at the project root with these six files:
 
-#### `working-memory/activeContext.example.md`
+#### `_working-memory/activeContext.example.md`
 
-This is the **committed template**. Each developer copies it to `activeContext.md` locally. The actual `activeContext.md` is gitignored because active context is per-developer — two people on the same team have different active contexts, and committing it creates constant meaningless merge conflicts on the most frequently updated file.
+This is the committed template. Each developer copies it to `activeContext.md` locally. The actual `activeContext.md` is gitignored because active context is per-developer: two people on the same team have different active contexts, and committing it creates constant meaningless merge conflicts on the most frequently updated file.
 
 ```markdown
 # Active Context
@@ -142,10 +142,10 @@ _None yet._
 After creating the example file, also create the developer's working copy:
 
 ```bash
-cp working-memory/activeContext.example.md working-memory/activeContext.md
+cp _working-memory/activeContext.example.md _working-memory/activeContext.md
 ```
 
-#### `working-memory/projectOverview.md`
+#### `_working-memory/projectOverview.md`
 
 ```markdown
 # Project Overview
@@ -172,7 +172,7 @@ _To be filled._
 
 Pre-populate the Stack and Repository Structure sections using what you detected in Step 1. For brownfield projects, note any areas of the codebase that should not be modified without explicit permission.
 
-#### `working-memory/decisionLog.md`
+#### `_working-memory/decisionLog.md`
 
 ```markdown
 # Decision Log
@@ -187,7 +187,7 @@ Pre-populate the Stack and Repository Structure sections using what you detected
 _No decisions logged yet._
 ```
 
-#### `working-memory/dataContracts.md`
+#### `_working-memory/dataContracts.md`
 
 ```markdown
 # Data Contracts
@@ -199,7 +199,7 @@ _No decisions logged yet._
 _No contracts defined yet._
 ```
 
-#### `working-memory/conventions.md`
+#### `_working-memory/conventions.md`
 
 ```markdown
 # Conventions
@@ -220,7 +220,7 @@ _Not yet defined._
 _Not yet defined._
 ```
 
-#### `working-memory/openQuestions.md`
+#### `_working-memory/openQuestions.md`
 
 ```markdown
 # Open Questions
@@ -235,7 +235,7 @@ _No open questions yet._
 
 Create `AGENTS.md` at the project root. If one already exists, merge the working memory section into it without removing existing content.
 
-The file must stay lean. It is the "sticky note on the monitor" — the agent reads this every session. The working memory is the filing cabinet it opens on demand.
+The file must stay lean. It is the "sticky note on the monitor" the agent reads every session. The working memory is the filing cabinet it opens on demand.
 
 ```markdown
 # AGENTS.md
@@ -248,10 +248,10 @@ The file must stay lean. It is the "sticky note on the monitor" — the agent re
 
 ## Working Memory
 
-This project uses a two-tier working memory at `working-memory/`.
+This project uses a two-tier working memory at `_working-memory/`.
 
 ### Always read on session start:
-- `working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only / gitignored)
+- `_working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only / gitignored)
 
 ### Read on demand:
 | File | Read when... |
@@ -275,7 +275,7 @@ Populate the Stack and Build/Test/Lint sections from what you detected.
 
 ### Step 4 — Agent + skill configuration (both tools read `.claude/`)
 
-This step creates the cross-tool canonical artifacts. Both Claude Code and VS Code Copilot read `.claude/skills/` and `.claude/agents/` natively[^cross-tool-canonical], so a single canonical location under `.claude/` serves both tools — no parallel `.github/agents/` or `.github/skills/` directories are needed.
+This step creates the cross-tool canonical artifacts. Both Claude Code and VS Code Copilot read `.claude/skills/` and `.claude/agents/` natively[^cross-tool-canonical], so one location under `.claude/` serves both. No parallel `.github/agents/` or `.github/skills/` directories are needed.
 
 #### 4a — Custom agent: working memory synchronizer
 
@@ -296,7 +296,7 @@ You are a maintenance agent responsible for keeping the working memory accurate 
 
 ## Process
 
-1. Read all files in `working-memory/` (five committed files plus the local `activeContext.md`).
+1. Read all files in `_working-memory/` (five committed files plus the local `activeContext.md`).
 2. Scan recent changes in the working tree (`git diff --stat HEAD~5` or similar).
 3. For each file, determine:
    - Is anything **stale** (describes something that no longer matches the code)?
@@ -333,11 +333,11 @@ description: >
 
 When this skill is activated, perform the following:
 
-1. Read `working-memory/activeContext.md` (local, may not exist yet — if missing, create from `activeContext.example.md`).
-2. Read all other files in `working-memory/`.
+1. Read `_working-memory/activeContext.md` (local; if missing, create it from `activeContext.example.md`).
+2. Read all other files in `_working-memory/`.
 3. Run `git diff --stat HEAD~5` to identify recent changes.
 4. For each working memory file, determine if anything is stale or missing.
-5. Enforce the 20-line hard limit on `activeContext.md` — evict completed items to `decisionLog.md`.
+5. Enforce the 20-line hard limit on `activeContext.md`; evict completed items to `decisionLog.md`.
 6. Propose all changes as a batch, grouped by file, and wait for confirmation before writing.
 
 ## File rules
@@ -361,14 +361,18 @@ Some consumers also keep a `CLAUDE.md` at the project root for Claude-Code-speci
 ```markdown
 ## Working Memory
 
-On session start, always read `working-memory/activeContext.md`.
+On session start, always read `_working-memory/activeContext.md`.
 Read other working memory files as directed by the table in `AGENTS.md`.
 After significant work, run the working-memory-synchronizer agent or manually update active context.
 ```
 
 ### Step 5 — Copilot-specific configuration
 
-The previous step handled the cross-tool agent and skill. This step adds only the Copilot-specific surfaces that have no cross-tool equivalent: the top-level `copilot-instructions.md` (Copilot's filename convention), lifecycle hooks under `.github/hooks/` (VS Code schema), and path-scoped instruction files under `.github/instructions/` (Copilot's `applyTo` glob feature).
+The previous step handled the cross-tool agent and skill. This step adds the three Copilot-specific surfaces that have no cross-tool equivalent:
+
+- `.github/copilot-instructions.md` at the top level (Copilot's filename convention)
+- Lifecycle hooks under `.github/hooks/` (VS Code schema)
+- Path-scoped instruction files under `.github/instructions/` (Copilot's `applyTo` glob feature)
 
 #### 5a — Copilot lifecycle hooks
 
@@ -410,7 +414,7 @@ Create the hook scripts. These must have both bash and PowerShell variants for c
 set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-WM_DIR="$REPO_ROOT/working-memory"
+WM_DIR="$REPO_ROOT/_working-memory"
 
 # Hooks fire on every session in every project, not just working-memory
 # consumers. Bail quietly so unrelated repos don't see noise.
@@ -423,7 +427,7 @@ fi
 if [ ! -f "$WM_DIR/activeContext.md" ]; then
   if [ -f "$WM_DIR/activeContext.example.md" ]; then
     cp "$WM_DIR/activeContext.example.md" "$WM_DIR/activeContext.md"
-    echo '{"systemMessage":"Created working-memory/activeContext.md from template. Update it with your current focus."}'
+    echo '{"systemMessage":"Created _working-memory/activeContext.md from template. Update it with your current focus."}'
   else
     echo '{"systemMessage":"No activeContext.example.md found. Working memory may not be initialized."}'
   fi
@@ -448,7 +452,7 @@ set -eu
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-if [ ! -d "$REPO_ROOT/working-memory" ]; then
+if [ ! -d "$REPO_ROOT/_working-memory" ]; then
   exit 0
 fi
 
@@ -469,7 +473,7 @@ Mark all shell scripts as executable:
 chmod +x scripts/working-memory-session-start.sh scripts/working-memory-session-end.sh
 ```
 
-On Windows, PowerShell scripts do not require a chmod equivalent — they execute based on the system's execution policy.
+On Windows, PowerShell scripts do not require a chmod equivalent; they execute based on the system's execution policy.
 
 #### 5b — Copilot instructions (expanded)
 
@@ -480,10 +484,10 @@ Create or merge into `.github/copilot-instructions.md`:
 
 ## Working Memory
 
-This project maintains a two-tier working memory at `working-memory/` for cross-session context.
+This project maintains a two-tier working memory at `_working-memory/` for cross-session context.
 
 ### Always read on session start:
-- `working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only)
+- `_working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only)
 
 ### Read on demand:
 | File | Read when... |
@@ -514,7 +518,7 @@ Create `.github/instructions/data-layer.instructions.md`:
 applyTo: "**/data/**,**/api/**,**/lib/data/**"
 ---
 
-When working on files in the data layer, always read `working-memory/dataContracts.md` first.
+When working on files in the data layer, always read `_working-memory/dataContracts.md` first.
 All data-consuming code must conform to the interfaces defined there.
 If you need to change a data shape, update `dataContracts.md` before modifying code.
 ```
@@ -537,17 +541,17 @@ chmod +x scripts/update-working-memory.sh
 
 ### Step 7 — Git configuration
 
-Add `activeContext.md` to `.gitignore` — it is per-developer local state. The example template remains committed so new contributors know the format.
+Add `activeContext.md` to `.gitignore`. It is per-developer local state. The example template stays committed so new contributors know the format.
 
 ```
 # .gitignore (append)
-working-memory/activeContext.md
+_working-memory/activeContext.md
 ```
 
 If the project has a `.gitattributes` file, add:
 
 ```
-working-memory/*.md merge=union
+_working-memory/*.md merge=union
 ```
 
 This reduces merge conflicts on append-only files like the decision log.
@@ -562,8 +566,8 @@ After scaffolding, output a summary:
 - Any conflicts or existing files that were preserved
 - **Platform coverage**: Confirm that both `.sh` and `.ps1` script variants were created
 - **Single-canonical check**: Confirm that the agent at `.claude/agents/working-memory-synchronizer.md` and the skill at `.claude/skills/update-working-memory/SKILL.md` exist, and that no stale `.github/agents/` or `.github/skills/` directories were created
-- Suggested next step: "Open `working-memory/projectOverview.md` and fill in the 'What This Is' section, then you're ready to go."
-- Remind the user: "`activeContext.md` is gitignored. Each team member should run `cp working-memory/activeContext.example.md working-memory/activeContext.md` (or `Copy-Item` on Windows) after cloning."
+- Suggested next step: "Open `_working-memory/projectOverview.md` and fill in the 'What This Is' section, then you're ready to go."
+- Remind the user: "`activeContext.md` is gitignored. Each team member should run `cp _working-memory/activeContext.example.md _working-memory/activeContext.md` (or `Copy-Item` on Windows) after cloning."
 - Tip: "In VS Code, type `/update-working-memory` in Copilot Chat to sync the working memory. In Claude Code, invoke the `working-memory-synchronizer` agent or use `/update-working-memory`."
 
 ---

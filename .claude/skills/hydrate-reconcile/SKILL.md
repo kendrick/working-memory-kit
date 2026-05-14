@@ -28,4 +28,4 @@ The original drafts plus a reconciliation block per draft.
 
 - Trusting a stale README over current code. The README is a source, but it can lie. When in conflict, the code is more often right.
 - Flagging convention drafts as "conflicts" when the code has multiple patterns. The convention is the dominant pattern; minority patterns are noise unless they're the new direction.
-- Treating an existing working memory entry as authoritative when it predates a major refactor. `git log working-memory/<file>.md` tells you when the entry was last touched; if the codebase moved on, the entry needs updating.
+- Treating an existing working memory entry as authoritative when it predates a major refactor. `git log _working-memory/<file>.md` tells you when the entry was last touched. If the codebase moved on, the entry needs updating.

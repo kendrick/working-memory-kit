@@ -8,10 +8,10 @@
 
 ## Working Memory
 
-This project uses a two-tier working memory at `working-memory/`.
+This project uses a two-tier working memory at `_working-memory/`.
 
 ### Always read on session start:
-- `working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only / gitignored)
+- `_working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only / gitignored)
 
 ### Read on demand:
 | File | Read when... |
