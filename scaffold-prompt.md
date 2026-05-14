@@ -48,15 +48,13 @@ working-memory-kit/
     │   └── openQuestions.md
     ├── AGENTS.md
     ├── .claude/
-    │   └── agents/
-    │       └── working-memory-synchronizer.md
+    │   ├── agents/
+    │   │   └── working-memory-synchronizer.md
+    │   └── skills/
+    │       └── update-working-memory/
+    │           └── SKILL.md
     ├── .github/
     │   ├── copilot-instructions.md
-    │   ├── agents/
-    │   │   └── working-memory-synchronizer.agent.md
-    │   ├── skills/
-    │   │   └── update-working-memory/
-    │   │       └── SKILL.md
     │   ├── hooks/
     │   │   └── working-memory-hooks.json
     │   └── instructions/
@@ -74,7 +72,7 @@ The `init.sh` (macOS/Linux) and `init.ps1` (Windows) installers should:
 
 1. Check for existing `working-memory/`, `.claude/`, `.github/` directories
 2. Prompt before overwriting anything
-3. Merge into existing `copilot-instructions.md`, `AGENTS.md`, or `.github/agents/` if present
+3. Merge into existing `copilot-instructions.md`, `AGENTS.md`, or `CLAUDE.md` if present
 4. Copy `activeContext.example.md` → `activeContext.md` for the installing developer
 5. Append `working-memory/activeContext.md` to `.gitignore`
 6. Mark `.sh` scripts as executable (macOS/Linux only)
@@ -91,7 +89,7 @@ Paste everything below this line into your agent.
 
 You are scaffolding a **two-tier working memory** into this project. The working memory gives AI agents persistent awareness of project state across sessions without bloating context on every turn.
 
-> **Implementation note:** Before creating Copilot-specific files (`.github/agents/`, `.github/skills/`, `.github/hooks/`), search the web for the latest GitHub Copilot documentation on custom agents, agent skills, and hooks to verify that file formats, frontmatter schemas, and directory conventions have not changed. Key docs to check:
+> **Implementation note:** Before creating Copilot-readable files (`.claude/agents/`, `.claude/skills/`, `.github/copilot-instructions.md`, `.github/hooks/`, `.github/instructions/`), search the web for the latest GitHub Copilot documentation on custom agents, agent skills, hooks, and instructions to verify that file formats, frontmatter schemas, and directory conventions have not changed. Key docs to check:
 > - https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/create-custom-agents
 > - https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills
 > - https://docs.github.com/en/copilot/reference/hooks-configuration
@@ -106,9 +104,8 @@ Before creating anything, scan the project root for:
 - `package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, or similar (detect stack)
 - Existing `AGENTS.md`, `CLAUDE.md`, `COPILOT.md`, `.github/copilot-instructions.md`
 - Existing `working-memory/` directory
-- `.claude/` directory and any existing agent definitions
-- `.github/agents/` directory and any existing `.agent.md` files
-- `.github/skills/` directory and any existing skills
+- `.claude/agents/` directory and any existing custom agent definitions (read by both Claude Code and VS Code Copilot)
+- `.claude/skills/` directory and any existing `SKILL.md` files (read by both tools)
 - `.github/hooks/` directory and any existing hook configurations
 - `.github/instructions/` directory and any path-specific instruction files
 - Source directory structure (src/, app/, lib/, etc.)
@@ -276,9 +273,11 @@ This project uses a two-tier working memory at `working-memory/`.
 
 Populate the Stack and Build/Test/Lint sections from what you detected.
 
-### Step 4 — Claude Code configuration
+### Step 4 — Agent + skill configuration (both tools read `.claude/`)
 
-#### 4a — Claude Code agent: working memory synchronizer
+This step creates the cross-tool canonical artifacts. Both Claude Code and VS Code Copilot read `.claude/skills/` and `.claude/agents/` natively[^cross-tool-canonical], so a single canonical location under `.claude/` serves both tools — no parallel `.github/agents/` or `.github/skills/` directories are needed.
+
+#### 4a — Custom agent: working memory synchronizer
 
 Create `.claude/agents/working-memory-synchronizer.md`:
 
@@ -317,64 +316,9 @@ You are a maintenance agent responsible for keeping the working memory accurate 
 - Never fabricate information. If unsure, add to `openQuestions.md`.
 ```
 
-#### 4b — CLAUDE.md integration
+#### 4b — Skill: update-working-memory
 
-If a `CLAUDE.md` file exists at the project root, append the following block to it. If it does not exist, create it with only this content:
-
-```markdown
-## Working Memory
-
-On session start, always read `working-memory/activeContext.md`.
-Read other working memory files as directed by the table in `AGENTS.md`.
-After significant work, run the working-memory-synchronizer agent or manually update active context.
-```
-
-### Step 5 — GitHub Copilot configuration
-
-Copilot supports custom agents, agent skills, lifecycle hooks, and path-specific instructions. This step creates equivalents of everything Claude Code gets, using Copilot's native primitives.
-
-#### 5a — Copilot custom agent: working memory synchronizer
-
-Create `.github/agents/working-memory-synchronizer.agent.md`:
-
-```markdown
----
-name: working-memory-synchronizer
-description: >
-  Synchronizes the working memory with project state. Use after completing a
-  feature, making an architectural decision, or when context feels stale.
-  Equivalent to running /update-working-memory.
----
-
-# Working Memory Synchronizer
-
-You are a maintenance agent responsible for keeping the working memory accurate and lean.
-
-## Process
-
-1. Read all files in `working-memory/` (five committed files plus the local `activeContext.md`).
-2. Scan recent changes in the working tree (`git diff --stat HEAD~5` or similar).
-3. For each file, determine:
-   - Is anything **stale** (describes something that no longer matches the code)?
-   - Is anything **missing** (a recent decision, convention, or contract not captured)?
-   - Is `activeContext.md` over 20 lines?
-
-4. Propose changes as a batch. Group by file.
-
-## Rules
-
-- **activeContext.md**: Evict completed work to `decisionLog.md`. Keep ≤20 lines.
-- **decisionLog.md**: Append only. Never edit past entries.
-- **projectOverview.md**: Update stack/structure only when the project shape actually changes.
-- **dataContracts.md**: Update when interfaces, schemas, or API shapes change.
-- **conventions.md**: Update when a new pattern emerges or an old one is deprecated.
-- **openQuestions.md**: Remove questions that have been answered (move the answer to the decision log).
-- Never fabricate information. If unsure, add to `openQuestions.md`.
-```
-
-#### 5b — Copilot agent skill: update-working-memory
-
-Create `.github/skills/update-working-memory/SKILL.md`:
+Create `.claude/skills/update-working-memory/SKILL.md`:
 
 ```markdown
 ---
@@ -408,9 +352,25 @@ When this skill is activated, perform the following:
 | `openQuestions.md` | Remove answered questions (move answers to decision log). |
 ```
 
-Users can invoke this skill in VS Code by typing `/update-working-memory` in Copilot Chat, or it can be invoked by the working-memory-synchronizer agent.
+Users can invoke this skill by typing `/update-working-memory` in either Copilot Chat or Claude Code. The `working-memory-synchronizer` custom agent above also invokes it programmatically.
 
-#### 5c — Copilot lifecycle hooks
+#### 4c — CLAUDE.md integration (optional)
+
+Some consumers also keep a `CLAUDE.md` at the project root for Claude-Code-specific custom instructions. If one exists, append the following block to it. If you want one and it doesn't exist, create it with only this content:
+
+```markdown
+## Working Memory
+
+On session start, always read `working-memory/activeContext.md`.
+Read other working memory files as directed by the table in `AGENTS.md`.
+After significant work, run the working-memory-synchronizer agent or manually update active context.
+```
+
+### Step 5 — Copilot-specific configuration
+
+The previous step handled the cross-tool agent and skill. This step adds only the Copilot-specific surfaces that have no cross-tool equivalent: the top-level `copilot-instructions.md` (Copilot's filename convention), lifecycle hooks under `.github/hooks/` (VS Code schema), and path-scoped instruction files under `.github/instructions/` (Copilot's `applyTo` glob feature).
+
+#### 5a — Copilot lifecycle hooks
 
 Create `.github/hooks/working-memory-hooks.json` using the VS Code hook schema (PascalCase event names, `command` field, `timeout` in seconds, with `windows` for the PowerShell variant):
 
@@ -511,7 +471,7 @@ chmod +x scripts/working-memory-session-start.sh scripts/working-memory-session-
 
 On Windows, PowerShell scripts do not require a chmod equivalent — they execute based on the system's execution policy.
 
-#### 5d — Copilot instructions (expanded)
+#### 5b — Copilot instructions (expanded)
 
 Create or merge into `.github/copilot-instructions.md`:
 
@@ -538,12 +498,12 @@ This project maintains a two-tier working memory at `working-memory/` for cross-
 - After completing a feature or making a significant decision, update `activeContext.md` and the relevant on-demand file.
 - `activeContext.md` is a queue: evict completed items to `decisionLog.md`.
 - Never let `activeContext.md` exceed 20 lines.
-- You can invoke the `@working-memory-synchronizer` agent or type `/update-working-memory` to trigger a full sync.
+- Type `/update-working-memory` in Copilot Chat (or invoke the `working-memory-synchronizer` custom agent) to trigger a full sync.
 ```
 
 If a `.github/copilot-instructions.md` already exists, insert the Working Memory section at the top without removing existing instructions.
 
-#### 5e — Path-specific instructions (optional but recommended)
+#### 5c — Path-specific instructions (optional but recommended)
 
 If the project has distinct areas that interact with the working memory differently (e.g., a `src/data/` directory that should always consult data contracts), create path-specific instruction files.
 
@@ -601,7 +561,11 @@ After scaffolding, output a summary:
 - Pre-populated values (stack, commands, structure)
 - Any conflicts or existing files that were preserved
 - **Platform coverage**: Confirm that both `.sh` and `.ps1` script variants were created
-- **Copilot parity check**: Confirm that for every `.claude/agents/*.md` file, a corresponding `.github/agents/*.agent.md` exists
+- **Single-canonical check**: Confirm that the agent at `.claude/agents/working-memory-synchronizer.md` and the skill at `.claude/skills/update-working-memory/SKILL.md` exist, and that no stale `.github/agents/` or `.github/skills/` directories were created
 - Suggested next step: "Open `working-memory/projectOverview.md` and fill in the 'What This Is' section, then you're ready to go."
 - Remind the user: "`activeContext.md` is gitignored. Each team member should run `cp working-memory/activeContext.example.md working-memory/activeContext.md` (or `Copy-Item` on Windows) after cloning."
 - Tip: "In VS Code, type `/update-working-memory` in Copilot Chat to sync the working memory. In Claude Code, invoke the `working-memory-synchronizer` agent or use `/update-working-memory`."
+
+---
+
+[^cross-tool-canonical]: VS Code Copilot reads project skills from `.claude/skills/` and custom agents from `.claude/agents/` natively, so the canonical location for both is under `.claude/`. See [VS Code: Use Agent Skills](https://code.visualstudio.com/docs/copilot/customization/agent-skills); [VS Code: Custom agents](https://code.visualstudio.com/docs/copilot/customization/custom-agents).
