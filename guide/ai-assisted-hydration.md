@@ -28,15 +28,15 @@ AI should not:
 
 Five phases. The memory-bank kit's last phase (verify) doesn't apply here; working memory isn't retrieval-funnel-shaped, since the six files are read on-demand by `AGENTS.md` guidance rather than filtered by frontmatter.
 
-| Phase | Input | Output |
-| --- | --- | --- |
-| **1. discover** | Repo state | Inventory of source locations: codebase files, manifests, README, ADRs folder if present, recent git history |
-| **2. extract** | A specific source location | Raw findings, one per detected fact, decision, convention, or contract |
-| **3. draft** | Raw findings | Filled sections of the six working memory files |
-| **4. reconcile** | Drafts + existing working memory state | Annotated: net-new, would-overwrite, conflicts-with-code |
-| **5. propose** | Reconciled drafts | Staged commit, or PR for multi-developer projects, for human review |
+| Phase            | Input                                  | Output                                                                                                       |
+| ---------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **1. discover**  | Repo state                             | Inventory of source locations: codebase files, manifests, README, ADRs folder if present, recent git history |
+| **2. extract**   | A specific source location             | Raw findings, one per detected fact, decision, convention, or contract                                       |
+| **3. draft**     | Raw findings                           | Filled sections of the six working memory files                                                              |
+| **4. reconcile** | Drafts + existing working memory state | Annotated: net-new, would-overwrite, conflicts-with-code                                                     |
+| **5. propose**   | Reconciled drafts                      | Staged commit, or PR for multi-developer projects, for human review                                          |
 
-Reference skills live in [`skills/`](../skills/). Each is a single `SKILL.md` invocable as a Copilot skill. Adapt to Claude Code agent definitions or your tool's equivalent as needed.
+Reference skills live in [`.claude/skills/`](../.claude/skills/). Each is a single `SKILL.md` invocable as a project skill by both VS Code Copilot and Claude Code from that canonical location[^cross-tool-skills]. A composite [`hydrator`](../.claude/agents/hydrator.md) agent at `.claude/agents/hydrator.md` orchestrates all five phases with the discipline rules enforced; both tools read it natively. Invoke as `@hydrator` to run the full pipeline.
 
 ### 1. discover
 
@@ -61,14 +61,14 @@ A finding is small: one sentence per detected fact, plus a pointer back to the s
 
 Map findings into the six-file template:
 
-| Finding type | Lands in |
-| --- | --- |
-| Stack, framework, language, deployment | `projectOverview.md` (Stack section) |
-| Repository structure, monorepo rules, off-limits areas | `projectOverview.md` (Repository Structure, Key Constraints) |
-| Decisions made (with context) | `decisionLog.md` |
-| Recurring patterns: naming, file organization, error handling | `conventions.md` |
-| Type definitions, API shapes, schemas | `dataContracts.md` |
-| Unresolved questions about the project's intent | `openQuestions.md` |
+| Finding type                                                  | Lands in                                                     |
+| ------------------------------------------------------------- | ------------------------------------------------------------ |
+| Stack, framework, language, deployment                        | `projectOverview.md` (Stack section)                         |
+| Repository structure, monorepo rules, off-limits areas        | `projectOverview.md` (Repository Structure, Key Constraints) |
+| Decisions made (with context)                                 | `decisionLog.md`                                             |
+| Recurring patterns: naming, file organization, error handling | `conventions.md`                                             |
+| Type definitions, API shapes, schemas                         | `dataContracts.md`                                           |
+| Unresolved questions about the project's intent               | `openQuestions.md`                                           |
 
 Drafts include the source as inline reference: a `decisionLog.md` entry citing the commit hash or ADR file it came from. Provenance keeps the working memory honest as the codebase evolves.
 
@@ -100,10 +100,12 @@ The producing side: a periodic scan of working memory across projects, led by an
 
 - It does not replace [scaffold-prompt.md](../scaffold-prompt.md). That prompt installs the structure and the easy stack-detection pre-population. This page covers the deeper content extraction.
 - It does not auto-write working memory files. Every phase ends with a human-reviewable artifact.
-- It does not specify per-tool integration details. Those live in `skills/`, one `SKILL.md` per phase, plus the existing Claude Code and Copilot agent definitions in `template/`.
+- It does not specify per-tool integration details. Those live in `.claude/skills/`, one `SKILL.md` per phase, plus the existing Claude Code and Copilot agent definitions in `template/`.
 
 ## See Also
 
 - [scaffold-prompt.md](../scaffold-prompt.md) for the structural bootstrap
 - [README.md](../README.md) for the kit overview
 - The parallel `ai-assisted-hydration.md` in `memory-bank/` (Layer 2 hydration; receiving side of the bridge)
+
+[^cross-tool-skills]: VS Code Copilot reads project skills from `.github/skills/`, `.claude/skills/`, and `.agents/skills/`. See [VS Code: Use Agent Skills](https://code.visualstudio.com/docs/copilot/customization/agent-skills); [GitHub Docs: Adding agent skills for GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills).

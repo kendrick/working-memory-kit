@@ -42,8 +42,8 @@ The installer **detects your stack, prompts before overwriting anything, and dro
 
 - `working-memory/` with six templates
 - `AGENTS.md` (creates one, or appends a section to your existing file)
-- `.claude/agents/working-memory-synchronizer.md` if your project uses Claude Code
-- `.github/agents/`, `skills/`, `hooks/`, `instructions/` if your project uses GitHub Copilot
+- `.claude/agents/working-memory-synchronizer.md` and `.claude/skills/update-working-memory/` (read by both Claude Code and VS Code Copilot)
+- `.github/hooks/working-memory-hooks.json` and `.github/instructions/data-layer.instructions.md` if your project uses GitHub Copilot (these formats are Copilot-specific)
 - `.github/copilot-instructions.md` (creates or appends)
 - `scripts/` with cross-platform `.sh` and `.ps1` hooks
 - `.working-memoryrc.example` for tuning thresholds
@@ -64,11 +64,11 @@ The other five files load on demand. `AGENTS.md` or `.github/copilot-instruction
 
 After meaningful work, you (or the synchronizer agent) move completed items out of `activeContext.md` and into `decisionLog.md`. The session-end hook nudges you when the diff suggests an update is overdue, by default when you've changed 5+ files **or** 200+ lines.
 
-Manual sync: `@working-memory-synchronizer` in Claude Code, or `/update-working-memory` in GitHub Copilot. Or run `./scripts/update-working-memory.sh` from any terminal to see the active config and current state.
+Manual sync: `/update-working-memory` in either Claude Code or GitHub Copilot Chat (both invoke the shared skill at `.claude/skills/update-working-memory/SKILL.md`), or `@working-memory-synchronizer` to invoke the custom agent. From any terminal, `./scripts/update-working-memory.sh` prints the active config and current state.
 
 ## Beyond the scaffold
 
-The scaffold pre-populates stack and structure. For a deeper one-time hydration that scans the codebase, recent git history, ADRs (if any), and other source material to fill `projectOverview.md`, `decisionLog.md`, `dataContracts.md`, and `conventions.md`, see [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md). Reference skill files for each phase live in [`skills/`](skills/).
+The scaffold pre-populates stack and structure. For a deeper one-time hydration that scans the codebase, recent git history, ADRs (if any), and other source material to fill `projectOverview.md`, `decisionLog.md`, `dataContracts.md`, and `conventions.md`, see [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md). Reference skill files for each phase live in [`.claude/skills/`](.claude/skills/) (read natively by both Claude Code and VS Code Copilot), and the composite [`hydrator`](.claude/agents/hydrator.md) agent at `.claude/agents/hydrator.md` orchestrates the full pipeline.
 
 The synchronizer agent handles ongoing maintenance after that.
 
@@ -99,7 +99,7 @@ Five files **or** two hundred lines for the nudge because the two signals catch 
 
 ## Compatibility
 
-The kit ships separate configs for each tool so they don't conflict. Claude Code reads `.claude/agents/working-memory-synchronizer.md` and `CLAUDE.md`; GitHub Copilot in VS Code reads `.github/agents/working-memory-synchronizer.agent.md`, the skill at `.github/skills/update-working-memory/`, and hooks at `.github/hooks/working-memory-hooks.json` (VS Code schema). Any agent that respects `AGENTS.md` will pick up the on-demand table.
+The kit puts shared artifacts at the single canonical location both tools natively read. Claude Code and VS Code Copilot both read `.claude/agents/working-memory-synchronizer.md` and `.claude/skills/update-working-memory/SKILL.md`. Copilot-only formats — hooks at `.github/hooks/working-memory-hooks.json` (VS Code schema) and path-scoped instructions at `.github/instructions/*.instructions.md` — stay under `.github/`. Any agent that respects `AGENTS.md` will pick up the on-demand table.
 
 The hooks JSON uses VS Code's schema (`SessionStart` / `Stop`, `command` with a `windows` override, `timeout`) since `.github/hooks/*.json` is a VS Code workspace path. GitHub Copilot Cloud Agent uses a different hooks schema; if you need both, you'll need a second hook file.
 
@@ -114,17 +114,22 @@ working-memory-kit/
 ├── init.sh                  # macOS/Linux installer
 ├── init.ps1                 # Windows installer
 ├── scaffold-prompt.md       # Standalone prompt you can hand to any agent
+├── CLAUDE.md                # Kit-level agent context (also auto-loaded by VS Code Copilot)
 ├── guide/                   # Practitioner-facing guides
 │   └── ai-assisted-hydration.md  # Five-phase pipeline for deeper content extraction
-├── skills/                  # Reference Copilot skill files for the hydration phases
-│   └── hydrate-{discover,extract,draft,reconcile,propose}/
+├── .claude/
+│   ├── agents/hydrator.md   # Composite agent orchestrating the 5 hydration skills
+│   └── skills/              # Hydration reference skills (read natively by both tools)
+│       └── hydrate-{discover,extract,draft,reconcile,propose}/
+├── .github/
+│   └── copilot-instructions.md  # Thin pointer to CLAUDE.md
 ├── examples/
 │   └── hydration-demo/      # Synthesized codebase for demoing the pipeline
 ├── template/                # Files copied into the consumer's project
 │   ├── working-memory/
 │   ├── AGENTS.md
-│   ├── .claude/agents/
-│   ├── .github/{agents,skills,hooks,instructions}/
+│   ├── .claude/{agents,skills}/
+│   ├── .github/{copilot-instructions.md,hooks,instructions}/
 │   ├── scripts/
 │   └── .working-memoryrc.example
 └── README.md
