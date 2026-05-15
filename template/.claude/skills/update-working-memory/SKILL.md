@@ -27,3 +27,4 @@ When this skill is activated, perform the following:
 | `dataContracts.md` | Update when interfaces, schemas, or API shapes change. |
 | `conventions.md` | Update when a new pattern emerges or an old one is deprecated. |
 | `openQuestions.md` | Remove answered questions (move answers to decision log). |
+| `antipatterns.md` | Append only. Add an entry when an approach was tried and abandoned — include a specific "Don't suggest" line so future agents avoid re-proposing it. |

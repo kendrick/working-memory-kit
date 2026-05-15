@@ -215,7 +215,7 @@ Write-Info 'scaffolding...'
 # ---------- working-memory ----------
 
 if (-not (Test-Path $WmDir)) { New-Item -ItemType Directory -Path $WmDir | Out-Null }
-$wmFiles = @('README.md','activeContext.example.md','projectOverview.md','decisionLog.md','dataContracts.md','conventions.md','openQuestions.md')
+$wmFiles = @('README.md','activeContext.example.md','projectOverview.md','decisionLog.md','dataContracts.md','conventions.md','openQuestions.md','antipatterns.md')
 foreach ($f in $wmFiles) {
     Copy-IfAbsent (Join-Path $Template "_working-memory\$f") (Join-Path $TargetDir "$WmDir\$f")
 }
@@ -323,8 +323,9 @@ $claudeSection = @'
 
 ## Working Memory
 
-Always read `_working-memory/activeContext.md` on session start.
-The on-demand table and update rules live under `## Working Memory` in [`AGENTS.md`](AGENTS.md) — that file is canonical.
+**AGENT INSTRUCTION:** before deciding what to read, scan the on-demand table under `## Working Memory` in [`AGENTS.md`](AGENTS.md). If your task matches a row, that file is required reading before you proceed.
+
+Always read `_working-memory/activeContext.md` on session start. AGENTS.md is the canonical source for the on-demand table and update rules.
 To sync working memory, run `/update-working-memory` or invoke the `working-memory-synchronizer` agent.
 '@
 Prepend-SectionIfMissing $claudeSection (Join-Path $TargetDir 'CLAUDE.md') '## Working Memory'

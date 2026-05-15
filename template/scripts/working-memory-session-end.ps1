@@ -53,6 +53,33 @@ if ($changedFiles -gt $fileThreshold -and $linesChanged -gt $lineThreshold) {
     $reason = "$linesChanged lines"
 }
 
+# Only check pointers when the diff threshold already trips the nudge.
+# We don't want a separate firing condition for "your dataContracts pointers
+# rotted" — that would be a new source of nag. But when the nudge is already
+# firing, broken pointers piggyback as extra signal in the same message.
+$extra = ''
 if ($reason) {
-    Write-Output "{`"systemMessage`":`"You changed $reason this session. Consider running /update-working-memory or @working-memory-synchronizer to keep the working memory current.`"}"
+    $dcFile = Join-Path $repoRoot '_working-memory\dataContracts.md'
+    if (Test-Path $dcFile) {
+        $broken = @()
+        $links = Select-String -Path $dcFile -Pattern '\]\(([^)]+)\)' -AllMatches |
+            ForEach-Object { $_.Matches } |
+            ForEach-Object { $_.Groups[1].Value }
+        foreach ($raw in $links) {
+            $path = ($raw -split '#', 2)[0]
+            if (-not $path) { continue }
+            if ($path -match '^(https?://|mailto:)') { continue }
+            $rootResolved = Join-Path $repoRoot $path
+            $wmResolved   = Join-Path $repoRoot (Join-Path '_working-memory' $path)
+            if ((Test-Path $rootResolved) -or (Test-Path $wmResolved)) { continue }
+            $broken += $path
+        }
+        if ($broken.Count -gt 0) {
+            $extra = " dataContracts.md has $($broken.Count) broken pointer(s): $($broken -join ', ')."
+        }
+    }
+}
+
+if ($reason) {
+    Write-Output "{`"systemMessage`":`"You changed $reason this session.$extra Consider running /update-working-memory or @working-memory-synchronizer to keep the working memory current.`"}"
 }

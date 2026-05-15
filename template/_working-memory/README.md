@@ -1,6 +1,6 @@
 # `_working-memory/`
 
-A two-tier working memory for this project. AI coding agents read these files for project context, and so should you — `decisionLog.md` and `conventions.md` in particular are first-class onboarding material for human contributors.
+A two-tier working memory for this project. AI coding agents read these files for project context, and so should you — `decisionLog.md`, `conventions.md`, and `antipatterns.md` in particular are first-class onboarding material for human contributors.
 
 ## What's here
 
@@ -13,12 +13,13 @@ A two-tier working memory for this project. AI coding agents read these files fo
 | `dataContracts.md`         | Canonical shapes for data flowing through the application — either pointer-to-types, schema sketch, or prose.          |
 | `conventions.md`           | "How we do things here" — naming, file layout, error handling, anything pattern-shaped.                                |
 | `openQuestions.md`         | Unresolved ambiguity. Check here before guessing; answers move into `decisionLog.md` when resolved.                    |
+| `antipatterns.md`          | Things the team tried that didn't work. Append-only. Agents must check before proposing refactors or library swaps.    |
 
 ## When to update each file
 
 - After completing a feature or making a meaningful decision, update `activeContext.md` and the relevant on-demand file.
 - `activeContext.md` is a queue, not an archive. Evict completed items to `decisionLog.md` so the file stays under twenty lines.
-- `decisionLog.md` is append-only. Never edit past entries — add a new entry that supersedes the old one.
+- `decisionLog.md` and `antipatterns.md` are append-only. Never edit past entries — add a new entry that supersedes the old one.
 - `projectOverview.md`, `dataContracts.md`, and `conventions.md` update when the project's _shape_ changes (new layer, new type, new pattern), not on every feature.
 
 Agents follow the same rules. The full on-demand table lives in [`../AGENTS.md`](../AGENTS.md).

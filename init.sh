@@ -262,7 +262,7 @@ info "scaffolding..."
 # ---------- working-memory ----------
 
 mkdir -p "$TARGET_DIR/$WM_DIR"
-for f in README.md activeContext.example.md projectOverview.md decisionLog.md dataContracts.md conventions.md openQuestions.md; do
+for f in README.md activeContext.example.md projectOverview.md decisionLog.md dataContracts.md conventions.md openQuestions.md antipatterns.md; do
   copy_if_absent "$TEMPLATE/_working-memory/$f" "$TARGET_DIR/$WM_DIR/$f"
 done
 
@@ -372,8 +372,9 @@ cat > "$CLAUDE_SECTION" <<'EOF'
 
 ## Working Memory
 
-Always read `_working-memory/activeContext.md` on session start.
-The on-demand table and update rules live under `## Working Memory` in [`AGENTS.md`](AGENTS.md) — that file is canonical.
+**AGENT INSTRUCTION:** before deciding what to read, scan the on-demand table under `## Working Memory` in [`AGENTS.md`](AGENTS.md). If your task matches a row, that file is required reading before you proceed.
+
+Always read `_working-memory/activeContext.md` on session start. AGENTS.md is the canonical source for the on-demand table and update rules.
 To sync working memory, run `/update-working-memory` or invoke the `working-memory-synchronizer` agent.
 EOF
 prepend_section_if_missing "$CLAUDE_SECTION" "$TARGET_DIR/CLAUDE.md" "## Working Memory"

@@ -44,6 +44,37 @@ elif [ "${LINES_CHANGED:-0}" -gt "$LINE_THRESHOLD" ]; then
   REASON="$LINES_CHANGED lines"
 fi
 
+# Only check pointers when the diff threshold already trips the nudge.
+# We don't want a separate firing condition for "your dataContracts pointers
+# rotted" — that would be a new source of nag. But when the nudge is already
+# firing, broken pointers piggyback as extra signal in the same message.
+EXTRA=""
 if [ -n "$REASON" ]; then
-  echo "{\"systemMessage\":\"You changed $REASON this session. Consider running /update-working-memory or @working-memory-synchronizer to keep the working memory current.\"}"
+  DC_FILE="$REPO_ROOT/_working-memory/dataContracts.md"
+  if [ -f "$DC_FILE" ]; then
+    BROKEN=""
+    BROKEN_COUNT=0
+    # Extract markdown link targets [label](path). Strip anchors. Skip URLs
+    # and empty paths. Resolve relative to repo root OR to the WM dir (since
+    # most pointers in dataContracts.md live in one of those two roots).
+    while IFS= read -r raw; do
+      [ -z "$raw" ] && continue
+      path="${raw%%#*}"
+      case "$path" in
+        ""|http://*|https://*|mailto:*) continue ;;
+      esac
+      if [ -e "$REPO_ROOT/$path" ] || [ -e "$REPO_ROOT/_working-memory/$path" ]; then
+        continue
+      fi
+      BROKEN_COUNT=$((BROKEN_COUNT + 1))
+      BROKEN="${BROKEN}${BROKEN:+, }$path"
+    done < <(grep -oE '\]\([^)]+\)' "$DC_FILE" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//')
+    if [ "$BROKEN_COUNT" -gt 0 ]; then
+      EXTRA=" dataContracts.md has $BROKEN_COUNT broken pointer(s): $BROKEN."
+    fi
+  fi
+fi
+
+if [ -n "$REASON" ]; then
+  echo "{\"systemMessage\":\"You changed $REASON this session.${EXTRA} Consider running /update-working-memory or @working-memory-synchronizer to keep the working memory current.\"}"
 fi

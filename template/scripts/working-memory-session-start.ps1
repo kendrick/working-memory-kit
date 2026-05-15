@@ -28,20 +28,31 @@ $maxLines = if ($env:WORKING_MEMORY_MAX_LINES) { [int]$env:WORKING_MEMORY_MAX_LI
 $activeContext = Join-Path $wmDir 'activeContext.md'
 $exampleFile = Join-Path $wmDir 'activeContext.example.md'
 
-# {"systemMessage":"..."} on stdout is the hook protocol — the host surfaces
-# it to the user. Plain Write-Host calls get ignored.
+# The directive lands every session, regardless of file state. The kit can't
+# enforce that the host tool auto-loaded AGENTS.md / CLAUDE.md at session
+# start, so the hook plants the working-memory directive directly. Hosts
+# that DID auto-load those files get a harmless duplicate — small cost
+# next to the value of not silently failing on cold-start.
+$directive = "Working memory at _working-memory/ is active. AGENT INSTRUCTION: before deciding what to read, scan the on-demand table in AGENTS.md's '## Working Memory' section. If your task matches a row, that file is required reading before you proceed."
+
+# Compose any condition message on top of the directive.
+$condition = ''
 if (-not (Test-Path $activeContext)) {
     if (Test-Path $exampleFile) {
         Copy-Item $exampleFile $activeContext
-        Write-Output '{"systemMessage":"Created _working-memory/activeContext.md from template. Update it with your current focus."}'
+        $condition = ' Created activeContext.md from template — update it with your current focus.'
     } else {
-        Write-Output '{"systemMessage":"No activeContext.example.md found. Working memory may not be initialized."}'
+        $condition = ' Warning: no activeContext.example.md found; working memory may not be initialized.'
     }
 } else {
     # The default limit (20) comes from activeContext.example.md. Past that,
     # the file has stopped being a queue and started being an archive.
     $lineCount = (Get-Content $activeContext | Where-Object { $_.Trim() -ne '' }).Count
     if ($lineCount -gt $maxLines) {
-        Write-Output "{`"systemMessage`":`"Warning: activeContext.md has $lineCount non-empty lines (limit is $maxLines). Run /update-working-memory to prune it.`"}"
+        $condition = " Warning: activeContext.md has $lineCount non-empty lines (limit is $maxLines). Run /update-working-memory to prune it."
     }
 }
+
+# {"systemMessage":"..."} on stdout is the hook protocol — the host surfaces
+# it to the user. Plain Write-Host calls get ignored.
+Write-Output "{`"systemMessage`":`"$directive$condition`"}"
