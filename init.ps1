@@ -67,11 +67,18 @@ function Append-SectionIfMissing ($srcContent, $dst, $marker) {
 # Two install paths: a cloned kit (template/ next to this script) or curl-pipe
 # (script alone, fetches the tarball). Local wins so kit devs can iterate
 # without round-tripping GitHub.
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Under `iex (irm ...)`, $MyInvocation.MyCommand.Path is empty; keep ScriptDir
+# empty in that case so the local-template and dogfood checks both fall through.
+$ScriptSource = $MyInvocation.MyCommand.Path
+if ($ScriptSource -and (Test-Path $ScriptSource)) {
+    $ScriptDir = Split-Path -Parent $ScriptSource
+} else {
+    $ScriptDir = ''
+}
 $TargetDir = (Get-Location).Path
 $Template  = $null
 
-if (Test-Path (Join-Path $ScriptDir 'template')) {
+if ($ScriptDir -and (Test-Path (Join-Path $ScriptDir 'template'))) {
     $Template = Join-Path $ScriptDir 'template'
     Write-Info "using local template at $Template"
 } else {
@@ -101,7 +108,7 @@ Write-Host "working-memory-kit installer" -ForegroundColor Blue
 Write-Host "Target: $TargetDir"
 Write-Host ""
 
-if ($TargetDir -eq $ScriptDir) {
+if ($ScriptDir -and ($TargetDir -eq $ScriptDir)) {
     Write-Warn "you're running this from the kit's own repo."
     Write-Warn "this would scaffold the kit into itself (dogfood). Continue only if that's intentional."
     if (-not (Confirm-Prompt "Proceed?" $false)) { Write-Host "aborted."; exit 0 }

@@ -24,13 +24,32 @@ ok()    { printf "%s %s\n" "$(c_green "[ok]")" "$*"; }
 warn()  { printf "%s %s\n" "$(c_yellow "[warn]")" "$*"; }
 fail()  { printf "%s %s\n" "$(c_red "[error]")" "$*" >&2; }
 
+# Under `curl | bash`, stdin is the script body, not the keyboard. Re-open
+# /dev/tty for prompts so the user can actually answer. If there's no tty
+# (CI, fully non-interactive), TTY_FD stays empty and reads return empty,
+# letting defaults take over.
+TTY_FD=""
+if { exec 3</dev/tty; } 2>/dev/null; then
+  TTY_FD=3
+fi
+
+prompt_read() {
+  local __var="$1"
+  if [ -n "$TTY_FD" ]; then
+    # shellcheck disable=SC2229
+    read -r -u "$TTY_FD" "$__var"
+  else
+    read -r "$__var" 2>/dev/null || eval "$__var=''"
+  fi
+}
+
 confirm() {
   local prompt="${1:-Continue?}"
   local default="${2:-y}"
-  local hint
+  local hint reply
   if [ "$default" = "y" ]; then hint="[Y/n]"; else hint="[y/N]"; fi
   printf "%s %s " "$prompt" "$hint"
-  read -r reply
+  prompt_read reply
   reply="${reply:-$default}"
   case "$reply" in
     y|Y|yes|YES) return 0 ;;
@@ -80,12 +99,19 @@ append_section_if_missing() {
 
 # Two install paths: a cloned kit (template/ next to this script) or curl-pipe
 # (script alone, fetches the tarball). Local wins so kit devs can iterate
-# without round-tripping GitHub.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || pwd)"
+# without round-tripping GitHub. Under `curl | bash`, BASH_SOURCE[0] is unset
+# and `$0` is "bash"; the :- default keeps `set -u` happy and SCRIPT_DIR stays
+# empty so the local-template and dogfood checks both fall through.
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
+if [ -n "$SCRIPT_SOURCE" ] && [ -f "$SCRIPT_SOURCE" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+else
+  SCRIPT_DIR=""
+fi
 TARGET_DIR="$(pwd)"
 TEMPLATE=""
 
-if [ -d "$SCRIPT_DIR/template" ]; then
+if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/template" ]; then
   TEMPLATE="$SCRIPT_DIR/template"
   info "using local template at $TEMPLATE"
 else
@@ -112,7 +138,7 @@ say "$(c_blue "working-memory-kit installer")"
 say "Target: $TARGET_DIR"
 say ""
 
-if [ "$TARGET_DIR" = "$SCRIPT_DIR" ]; then
+if [ -n "$SCRIPT_DIR" ] && [ "$TARGET_DIR" = "$SCRIPT_DIR" ]; then
   warn "you're running this from the kit's own repo."
   warn "this would scaffold the kit into itself (dogfood). Continue only if that's intentional."
   if ! confirm "Proceed?" "n"; then
@@ -169,12 +195,12 @@ fi
 WM_DIR_DEFAULT="_working-memory"
 WM_DIR="$WM_DIR_DEFAULT"
 printf "Install working memory at %s/? [Y/n, or specify alternate path] " "$WM_DIR_DEFAULT"
-read -r wm_reply
+prompt_read wm_reply
 case "$wm_reply" in
   ""|y|Y|yes|YES) ;;
   n|N|no|NO)
     printf "Enter alternate path (relative to repo root): "
-    read -r wm_custom
+    prompt_read wm_custom
     if [ -n "$wm_custom" ]; then
       WM_DIR="${wm_custom%/}"
     fi
