@@ -43,7 +43,7 @@ function Copy-IfAbsent ($src, $dst) {
 }
 
 # Idempotency relies on the marker line. If a user renames the heading the
-# detection misses and a duplicate section gets appended on re-run, which is
+# detection misses and a duplicate section gets added on re-run, which is
 # easier to spot than a silent skip. That's the trade we want.
 function Append-SectionIfMissing ($srcContent, $dst, $marker) {
     if (-not (Test-Path $dst)) {
@@ -60,6 +60,26 @@ function Append-SectionIfMissing ($srcContent, $dst, $marker) {
     }
     Add-Content -Path $dst -Value "`n$srcContent"
     Write-Ok "appended working-memory section to $dst"
+}
+
+# Prepend variant — for files where the working-memory section is THE content
+# the agent needs to find early (CLAUDE.md, copilot-instructions.md). Long
+# pre-existing files can push an appended section past an agent's read window.
+function Prepend-SectionIfMissing ($srcContent, $dst, $marker) {
+    if (-not (Test-Path $dst)) {
+        $parent = Split-Path $dst -Parent
+        if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        Set-Content -Path $dst -Value $srcContent
+        Write-Ok "created $dst"
+        return
+    }
+    $current = Get-Content $dst -Raw
+    if ($current -like "*$marker*") {
+        Write-Info "$dst already contains working-memory section, leaving alone"
+        return
+    }
+    Set-Content -Path $dst -Value "$srcContent`n$current" -NoNewline
+    Write-Ok "prepended working-memory section to $dst"
 }
 
 # ---------- locate template ----------
@@ -100,6 +120,11 @@ if ($ScriptDir -and (Test-Path (Join-Path $ScriptDir 'template'))) {
         exit 1
     }
 }
+
+# Hydration artifacts live at the kit root's .claude/, not inside template/,
+# because they're also used by kit contributors working in the kit repo itself.
+# Resolve KitRoot (parent of template/) so the installer can pull them too.
+$KitRoot = Split-Path -Parent $Template
 
 # ---------- intro ----------
 
@@ -190,7 +215,7 @@ Write-Info 'scaffolding...'
 # ---------- working-memory ----------
 
 if (-not (Test-Path $WmDir)) { New-Item -ItemType Directory -Path $WmDir | Out-Null }
-$wmFiles = @('activeContext.example.md','projectOverview.md','decisionLog.md','dataContracts.md','conventions.md','openQuestions.md')
+$wmFiles = @('README.md','activeContext.example.md','projectOverview.md','decisionLog.md','dataContracts.md','conventions.md','openQuestions.md')
 foreach ($f in $wmFiles) {
     Copy-IfAbsent (Join-Path $Template "_working-memory\$f") (Join-Path $TargetDir "$WmDir\$f")
 }
@@ -247,6 +272,23 @@ Copy-IfAbsent (Join-Path $Template '.working-memoryrc.example') `
 $agentsTemplate = Get-Content (Join-Path $Template 'AGENTS.md') -Raw
 Append-SectionIfMissing $agentsTemplate (Join-Path $TargetDir 'AGENTS.md') '## Working Memory'
 
+# Pre-fill the Stack section if (a) we detected a language and (b) the
+# placeholder comment is still present. The comment is the idempotency
+# marker — once a human fills it in, the placeholder is gone and we
+# leave the section alone on re-runs.
+if ($Stack.Language) {
+    $agentsPath = Join-Path $TargetDir 'AGENTS.md'
+    $agentsContent = Get-Content $agentsPath -Raw
+    $stackMarker = '<!-- One line per layer. Detected from project. -->'
+    if ($agentsContent -like "*$stackMarker*") {
+        $stackBlock = "- Language: $($Stack.Language)"
+        if ($Stack.Framework) { $stackBlock += "`n- Framework: $($Stack.Framework)" }
+        $agentsContent = $agentsContent -replace [regex]::Escape($stackMarker), $stackBlock
+        Set-Content -Path $agentsPath -Value $agentsContent -NoNewline
+        Write-Ok 'pre-populated AGENTS.md Stack with detected stack'
+    }
+}
+
 # ---------- Claude Code config ----------
 
 foreach ($d in @('.claude\agents','.claude\skills\update-working-memory')) {
@@ -259,15 +301,33 @@ Copy-IfAbsent `
     (Join-Path $Template '.claude\skills\update-working-memory\SKILL.md') `
     (Join-Path $TargetDir '.claude\skills\update-working-memory\SKILL.md')
 
+# Hydration surface: composite agent + five phase skills. Sourced from the kit
+# root (not template/) since kit contributors use the same files. Optional —
+# installs cleanly if the kit version doesn't ship them yet.
+$hydratorSrc = Join-Path $KitRoot '.claude\agents\hydrator.md'
+if (Test-Path $hydratorSrc) {
+    Copy-IfAbsent $hydratorSrc (Join-Path $TargetDir '.claude\agents\hydrator.md')
+}
+$hydrateSkillsDir = Join-Path $KitRoot '.claude\skills'
+if (Test-Path $hydrateSkillsDir) {
+    Get-ChildItem -Path $hydrateSkillsDir -Directory -Filter 'hydrate-*' | ForEach-Object {
+        $skillFile = Join-Path $_.FullName 'SKILL.md'
+        if (Test-Path $skillFile) {
+            $dst = Join-Path $TargetDir ".claude\skills\$($_.Name)\SKILL.md"
+            Copy-IfAbsent $skillFile $dst
+        }
+    }
+}
+
 $claudeSection = @'
 
 ## Working Memory
 
-On session start, always read `_working-memory/activeContext.md`.
-Read other working memory files as directed by the table in `AGENTS.md`.
-After significant work, run the working-memory-synchronizer agent or manually update active context.
+Always read `_working-memory/activeContext.md` on session start.
+The on-demand table and update rules live under `## Working Memory` in [`AGENTS.md`](AGENTS.md) — that file is canonical.
+To sync working memory, run `/update-working-memory` or invoke the `working-memory-synchronizer` agent.
 '@
-Append-SectionIfMissing $claudeSection (Join-Path $TargetDir 'CLAUDE.md') '## Working Memory'
+Prepend-SectionIfMissing $claudeSection (Join-Path $TargetDir 'CLAUDE.md') '## Working Memory'
 
 # ---------- Copilot config ----------
 
@@ -281,7 +341,7 @@ Copy-IfAbsent (Join-Path $Template '.github\instructions\data-layer.instructions
               (Join-Path $TargetDir '.github\instructions\data-layer.instructions.md')
 
 $copilotTemplate = Get-Content (Join-Path $Template '.github\copilot-instructions.md') -Raw
-Append-SectionIfMissing $copilotTemplate (Join-Path $TargetDir '.github\copilot-instructions.md') '## Working Memory'
+Prepend-SectionIfMissing $copilotTemplate (Join-Path $TargetDir '.github\copilot-instructions.md') '## Working Memory'
 
 # ---------- scripts ----------
 
@@ -351,7 +411,13 @@ Write-Host ''
 Write-Info 'verifying canonical artifacts...'
 $canonical = @(
     '.claude\agents\working-memory-synchronizer.md',
-    '.claude\skills\update-working-memory\SKILL.md'
+    '.claude\skills\update-working-memory\SKILL.md',
+    '.claude\agents\hydrator.md',
+    '.claude\skills\hydrate-discover\SKILL.md',
+    '.claude\skills\hydrate-extract\SKILL.md',
+    '.claude\skills\hydrate-draft\SKILL.md',
+    '.claude\skills\hydrate-reconcile\SKILL.md',
+    '.claude\skills\hydrate-propose\SKILL.md'
 )
 $canonicalOk = $true
 foreach ($f in $canonical) {
@@ -369,11 +435,16 @@ Write-Host ''
 Write-Host 'done.' -ForegroundColor Green
 Write-Host ''
 Write-Host 'next steps:'
-Write-Host "  1. Open $WmDir\projectOverview.md and fill in `"What This Is`"."
+Write-Host '  1. Populate working memory (recommended for existing codebases):'
+Write-Host '       In Claude Code or VS Code Copilot, invoke the hydrator agent'
+Write-Host '       (or run /hydrate-discover to walk the five phases one at a time).'
+Write-Host '       This scans your codebase, git history, README, and ADRs to fill'
+Write-Host '       projectOverview / decisionLog / dataContracts / conventions.'
+Write-Host '       For a brand-new project, skip this step and edit the files by hand.'
 Write-Host "  2. Edit $WmDir\activeContext.md to reflect what you're working on."
 Write-Host '  3. Teammates: after cloning, run:'
 Write-Host "       Copy-Item $WmDir\activeContext.example.md $WmDir\activeContext.md"
-Write-Host '  4. To sync working memory: invoke the working-memory-synchronizer agent, or'
+Write-Host '  4. Ongoing sync: invoke the working-memory-synchronizer agent, or'
 Write-Host '     run: .\scripts\update-working-memory.ps1'
 Write-Host '  5. To tune line limits or nudge thresholds:'
 Write-Host '       Copy-Item .working-memoryrc.example .working-memoryrc   # then edit'

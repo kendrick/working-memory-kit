@@ -25,7 +25,9 @@ LINE_THRESHOLD="${WORKING_MEMORY_LINE_THRESHOLD:-$(read_cfg NUDGE_LINE_THRESHOLD
 
 # --shortstat covers both signals in one git call. Format example:
 #   " 5 files changed, 200 insertions(+), 50 deletions(-)"
-DIFF_STATS=$(git -C "$REPO_ROOT" diff --shortstat HEAD 2>/dev/null || true)
+# LC_ALL=C pins the shortstat output to English so the regexes below stay
+# valid under non-default locales.
+DIFF_STATS=$(LC_ALL=C git -C "$REPO_ROOT" diff --shortstat HEAD 2>/dev/null || true)
 CHANGED_FILES=$(echo "$DIFF_STATS" | grep -oE '[0-9]+ files? changed' | grep -oE '[0-9]+' || echo 0)
 INSERTIONS=$(echo "$DIFF_STATS" | grep -oE '[0-9]+ insertions?' | grep -oE '[0-9]+' || echo 0)
 DELETIONS=$(echo "$DIFF_STATS" | grep -oE '[0-9]+ deletions?' | grep -oE '[0-9]+' || echo 0)

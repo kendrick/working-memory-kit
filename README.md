@@ -38,11 +38,14 @@ irm https://raw.githubusercontent.com/kendrick/working-memory-kit/main/init.ps1 
 
 Replace `kendrick` with the GitHub org or wherever this repo is hosted.
 
-- `_working-memory/` with six templates
-- `AGENTS.md` (creates one, or appends a section to your existing file)
-- `.claude/agents/working-memory-synchronizer.md` and `.claude/skills/update-working-memory/` (read by both Claude Code and VS Code Copilot)
+- `_working-memory/` with the six template files plus a short `README.md` for new contributors
+- `AGENTS.md` (creates one, or appends a section to your existing file). This is the canonical home for the on-demand table and update rules.
+- `.claude/agents/` and `.claude/skills/` (read by both Claude Code and VS Code Copilot):
+  - `working-memory-synchronizer` agent and `update-working-memory` skill — the **ongoing maintenance** surface.
+  - `hydrator` agent and `hydrate-{discover,extract,draft,reconcile,propose}` skills — the **one-time onboarding** surface for brownfield installs.
 - `.github/hooks/working-memory-hooks.json` and `.github/instructions/data-layer.instructions.md` if your project uses GitHub Copilot (these formats are Copilot-specific)
-- `.github/copilot-instructions.md` (creates or appends)
+- `.github/copilot-instructions.md` (creates or prepends a thin pointer to `AGENTS.md`)
+- `CLAUDE.md` (prepends a thin pointer to `AGENTS.md`)
 - `scripts/` with cross-platform `.sh` and `.ps1` hooks
 - `.working-memoryrc.example` for tuning thresholds
 
@@ -62,11 +65,18 @@ After meaningful work, you (or the synchronizer agent) move completed items out 
 
 Manual sync: `/update-working-memory` in either Claude Code or GitHub Copilot Chat (both invoke the shared skill at `.claude/skills/update-working-memory/SKILL.md`), or `@working-memory-synchronizer` to invoke the custom agent. From any terminal, `./scripts/update-working-memory.sh` prints the active config and current state.
 
-## Beyond the scaffold
+## Populating working memory after install
 
-The scaffold pre-populates stack and structure. For a deeper one-time hydration that scans the codebase, recent git history, ADRs (if any), and other source material to fill `projectOverview.md`, `decisionLog.md`, `dataContracts.md`, and `conventions.md`, see [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md). Reference skill files for each phase live in [`.claude/skills/`](.claude/skills/) (read natively by both Claude Code and VS Code Copilot), and the composite [`hydrator`](.claude/agents/hydrator.md) agent at `.claude/agents/hydrator.md` orchestrates the full pipeline.
+The scaffold pre-populates stack info and a directory map. For an existing codebase, the next step is the **hydration pipeline**, which scans your code, git history, README, and any ADRs to draft proposed content for `projectOverview.md`, `decisionLog.md`, `dataContracts.md`, and `conventions.md` — staged as a commit (or PR for multi-developer projects) for human review.
 
-The synchronizer agent handles ongoing maintenance after that.
+The installer ships the pipeline into your repo. Two ways to run it:
+
+- **Composite agent.** Ask your AI agent to "run the hydrator" (Claude Code) or "use the agent at `.claude/agents/hydrator.md`" (Copilot Chat). It orchestrates the five phases end-to-end.
+- **Phase by phase.** Invoke the slash skills one at a time: `/hydrate-discover`, `/hydrate-extract`, `/hydrate-draft`, `/hydrate-reconcile`, `/hydrate-propose`. Useful when you want to review each phase's output before advancing.
+
+Brand-new projects can skip hydration and edit the template files by hand. The pipeline expects a codebase to scan.
+
+After hydration lands, the `working-memory-synchronizer` agent handles ongoing maintenance. See [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md) for the full pipeline design.
 
 ## Customizing
 
@@ -98,6 +108,17 @@ Five files **or** two hundred lines for the nudge because the two signals catch 
 The kit puts shared artifacts at the one canonical location both tools natively read. Claude Code and VS Code Copilot both read `.claude/agents/working-memory-synchronizer.md` and `.claude/skills/update-working-memory/SKILL.md`. Copilot-only formats stay under `.github/`: hooks at `.github/hooks/working-memory-hooks.json` (VS Code schema), and path-scoped instructions at `.github/instructions/*.instructions.md`. Any agent that respects `AGENTS.md` will pick up the on-demand table.
 
 The hooks JSON uses VS Code's schema (`SessionStart` / `Stop`, `command` with a `windows` override, `timeout`) since `.github/hooks/*.json` is a VS Code workspace path. GitHub Copilot Cloud Agent uses a different hooks schema; if you need both, you'll need a second hook file.
+
+### Invoking agents
+
+Both tools _read_ the agent files at `.claude/agents/`, but the _invocation patterns_ differ. Knowing this saves a "why doesn't `@hydrator` autocomplete?" moment:
+
+| Tool                 | How to invoke a custom agent                                                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code          | Ask in chat ("run the hydrator", "use the working-memory-synchronizer"), use the `/agents` command if your build surfaces one, or invoke via the Agent tool in scripts. `@` is for file references, not agent mentions.                                 |
+| VS Code Copilot Chat | Reference the agent file by path ("use the agent at `.claude/agents/hydrator.md`") and Copilot will read and follow it. `@` autocompletes Copilot-registered chat participants only (`@workspace`, `@terminal`, etc.) — not files in `.claude/agents/`. |
+
+Slash skills (`/update-working-memory`, `/hydrate-discover`) are the most portable invocation surface — both tools surface them via the slash menu once the SKILL.md is in place.
 
 ## Updating the kit
 

@@ -23,8 +23,16 @@ function Get-Cfg ($key, $default) {
 $fileThreshold = if ($env:WORKING_MEMORY_FILE_THRESHOLD) { [int]$env:WORKING_MEMORY_FILE_THRESHOLD } else { [int](Get-Cfg 'NUDGE_FILE_THRESHOLD' 5) }
 $lineThreshold = if ($env:WORKING_MEMORY_LINE_THRESHOLD) { [int]$env:WORKING_MEMORY_LINE_THRESHOLD } else { [int](Get-Cfg 'NUDGE_LINE_THRESHOLD' 200) }
 
-# --shortstat covers both signals in one git call.
-$diffStats = git -C $repoRoot diff --shortstat HEAD 2>$null
+# --shortstat covers both signals in one git call. LC_ALL=C pins the output
+# to English so the regexes below stay valid under non-default locales.
+$prevLcAll = $env:LC_ALL
+$env:LC_ALL = 'C'
+try {
+    $diffStats = git -C $repoRoot diff --shortstat HEAD 2>$null
+} finally {
+    if ($null -eq $prevLcAll) { Remove-Item Env:LC_ALL -ErrorAction SilentlyContinue }
+    else { $env:LC_ALL = $prevLcAll }
+}
 $changedFiles = 0
 $linesChanged = 0
 if ($diffStats) {

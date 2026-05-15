@@ -76,7 +76,7 @@ copy_if_absent() {
 }
 
 # Idempotency relies on the marker line. If a user renames the heading the
-# detection misses and a duplicate section gets appended on re-run, which is
+# detection misses and a duplicate section gets added on re-run, which is
 # easier to spot than a silent skip. That's the trade we want.
 append_section_if_missing() {
   local src="$1" dst="$2" marker="$3"
@@ -93,6 +93,30 @@ append_section_if_missing() {
   printf "\n" >> "$dst"
   cat "$src" >> "$dst"
   ok "appended working-memory section to $dst"
+}
+
+# Prepend variant — for files where the working-memory section is THE content
+# the agent needs to find early (CLAUDE.md, copilot-instructions.md). Long
+# pre-existing files can push an appended section past an agent's read window.
+prepend_section_if_missing() {
+  local src="$1" dst="$2" marker="$3"
+  if [ ! -f "$dst" ]; then
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+    ok "created $dst"
+    return
+  fi
+  if grep -qF "$marker" "$dst"; then
+    info "$dst already contains working-memory section, leaving alone"
+    return
+  fi
+  local tmp
+  tmp=$(mktemp)
+  cat "$src" > "$tmp"
+  printf "\n" >> "$tmp"
+  cat "$dst" >> "$tmp"
+  mv "$tmp" "$dst"
+  ok "prepended working-memory section to $dst"
 }
 
 # ---------- locate template ----------
@@ -130,6 +154,11 @@ else
     exit 1
   fi
 fi
+
+# Hydration artifacts live at the kit root's .claude/, not inside template/,
+# because they're also used by kit contributors working in the kit repo itself.
+# Resolve KIT_ROOT (parent of template/) so the installer can pull them too.
+KIT_ROOT="$(dirname "$TEMPLATE")"
 
 # ---------- intro ----------
 
@@ -233,7 +262,7 @@ info "scaffolding..."
 # ---------- working-memory ----------
 
 mkdir -p "$TARGET_DIR/$WM_DIR"
-for f in activeContext.example.md projectOverview.md decisionLog.md dataContracts.md conventions.md openQuestions.md; do
+for f in README.md activeContext.example.md projectOverview.md decisionLog.md dataContracts.md conventions.md openQuestions.md; do
   copy_if_absent "$TEMPLATE/_working-memory/$f" "$TARGET_DIR/$WM_DIR/$f"
 done
 
@@ -292,6 +321,22 @@ append_section_if_missing \
   "$TARGET_DIR/AGENTS.md" \
   "## Working Memory"
 
+# Pre-fill the Stack section if (a) we detected a language and (b) the
+# placeholder comment is still present. The comment is the idempotency
+# marker — once a human fills it in, the placeholder is gone and we
+# leave the section alone on re-runs.
+if [ -n "$DETECTED_LANG" ] && grep -qF "<!-- One line per layer. Detected from project. -->" "$TARGET_DIR/AGENTS.md"; then
+  STACK_BLOCK="- Language: $DETECTED_LANG"
+  [ -n "$DETECTED_FRAMEWORK" ] && STACK_BLOCK="$STACK_BLOCK"$'\n'"- Framework: $DETECTED_FRAMEWORK"
+  # Use perl rather than awk/sed: BSD awk rejects embedded newlines in -v
+  # values, and BSD/GNU sed multiline replacements diverge. Perl is reliably
+  # present on every macOS/Linux machine where this installer runs.
+  STACK_REPL="$STACK_BLOCK" perl -i -pe \
+    's{<!-- One line per layer\. Detected from project\. -->}{$ENV{STACK_REPL}}' \
+    "$TARGET_DIR/AGENTS.md"
+  ok "pre-populated AGENTS.md Stack with detected stack"
+fi
+
 # ---------- Claude Code config ----------
 
 mkdir -p "$TARGET_DIR/.claude/agents" "$TARGET_DIR/.claude/skills/update-working-memory"
@@ -302,16 +347,36 @@ copy_if_absent \
   "$TEMPLATE/.claude/skills/update-working-memory/SKILL.md" \
   "$TARGET_DIR/.claude/skills/update-working-memory/SKILL.md"
 
+# Hydration surface: composite agent + five phase skills. Sourced from the kit
+# root (not template/) since kit contributors use the same files. Optional —
+# installs cleanly if the kit version doesn't ship them yet.
+if [ -f "$KIT_ROOT/.claude/agents/hydrator.md" ]; then
+  copy_if_absent \
+    "$KIT_ROOT/.claude/agents/hydrator.md" \
+    "$TARGET_DIR/.claude/agents/hydrator.md"
+fi
+if [ -d "$KIT_ROOT/.claude/skills" ]; then
+  for skill_dir in "$KIT_ROOT/.claude/skills/hydrate-"*; do
+    [ -d "$skill_dir" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    if [ -f "$skill_dir/SKILL.md" ]; then
+      copy_if_absent \
+        "$skill_dir/SKILL.md" \
+        "$TARGET_DIR/.claude/skills/$skill_name/SKILL.md"
+    fi
+  done
+fi
+
 CLAUDE_SECTION=$(mktemp)
 cat > "$CLAUDE_SECTION" <<'EOF'
 
 ## Working Memory
 
-On session start, always read `_working-memory/activeContext.md`.
-Read other working memory files as directed by the table in `AGENTS.md`.
-After significant work, run the working-memory-synchronizer agent or manually update active context.
+Always read `_working-memory/activeContext.md` on session start.
+The on-demand table and update rules live under `## Working Memory` in [`AGENTS.md`](AGENTS.md) — that file is canonical.
+To sync working memory, run `/update-working-memory` or invoke the `working-memory-synchronizer` agent.
 EOF
-append_section_if_missing "$CLAUDE_SECTION" "$TARGET_DIR/CLAUDE.md" "## Working Memory"
+prepend_section_if_missing "$CLAUDE_SECTION" "$TARGET_DIR/CLAUDE.md" "## Working Memory"
 rm -f "$CLAUDE_SECTION"
 
 # ---------- Copilot config ----------
@@ -328,7 +393,7 @@ copy_if_absent \
   "$TEMPLATE/.github/instructions/data-layer.instructions.md" \
   "$TARGET_DIR/.github/instructions/data-layer.instructions.md"
 
-append_section_if_missing \
+prepend_section_if_missing \
   "$TEMPLATE/.github/copilot-instructions.md" \
   "$TARGET_DIR/.github/copilot-instructions.md" \
   "## Working Memory"
@@ -400,7 +465,13 @@ info "verifying canonical artifacts..."
 CANONICAL_OK=1
 for f in \
   ".claude/agents/working-memory-synchronizer.md" \
-  ".claude/skills/update-working-memory/SKILL.md"
+  ".claude/skills/update-working-memory/SKILL.md" \
+  ".claude/agents/hydrator.md" \
+  ".claude/skills/hydrate-discover/SKILL.md" \
+  ".claude/skills/hydrate-extract/SKILL.md" \
+  ".claude/skills/hydrate-draft/SKILL.md" \
+  ".claude/skills/hydrate-reconcile/SKILL.md" \
+  ".claude/skills/hydrate-propose/SKILL.md"
 do
   if [ -f "$TARGET_DIR/$f" ]; then
     ok "present: $f"
@@ -416,11 +487,16 @@ say ""
 say "$(c_green "done.")"
 say ""
 say "next steps:"
-say "  1. Open $WM_DIR/projectOverview.md and fill in 'What This Is'."
+say "  1. Populate working memory (recommended for existing codebases):"
+say "       In Claude Code or VS Code Copilot, invoke the hydrator agent"
+say "       (or run /hydrate-discover to walk the five phases one at a time)."
+say "       This scans your codebase, git history, README, and ADRs to fill"
+say "       projectOverview / decisionLog / dataContracts / conventions."
+say "       For a brand-new project, skip this step and edit the files by hand."
 say "  2. Edit $WM_DIR/activeContext.md to reflect what you're working on."
 say "  3. Teammates: after cloning, run:"
 say "       cp $WM_DIR/activeContext.example.md $WM_DIR/activeContext.md"
-say "  4. To sync working memory: invoke the working-memory-synchronizer agent, or"
+say "  4. Ongoing sync: invoke the working-memory-synchronizer agent, or"
 say "     run: ./scripts/update-working-memory.sh"
 say "  5. To tune line limits or nudge thresholds:"
 say "       cp .working-memoryrc.example .working-memoryrc   # then edit"
