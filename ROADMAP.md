@@ -7,7 +7,7 @@ matters most and why. New entries link to their issue once it is filed.
 
 ## Now
 
-- **Testing foundation (v0).** The kit's whole promise is "idempotent, never clobbers your content," which is the hardest property to verify by eye and the easiest to regress. bats and Pester run the installer against fixture repos on an ubuntu/macOS/windows CI matrix. Gates the coexistence work below. · issue: #1
+- **Testing foundation (v0).** The kit's whole promise is "idempotent, never clobbers your content," which is the hardest property to verify by eye and the easiest to regress. bats runs the installer and hooks against fixture repos on ubuntu and macOS (via `npx`, no install step); the PowerShell/Pester side is split out to #9. Gates the coexistence work below. · issue: #1
 - **In this pass** (no issue): the session-end nudge no longer miscounts during a conflicted merge (was [D.2]); this `ROADMAP.md` and `CHANGELOG.md`; GitHub issue templates.
 
 ## Next
@@ -15,6 +15,7 @@ matters most and why. New entries link to their issue once it is filed.
 - **Coexistence with external spec-driven tooling, V1a.** Fence working-memory's section in `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` with `<!-- working-memory:start/end -->` markers, so a re-install never touches another tool's content. The load-bearing, highest-risk piece; lands on the v0 test harness. · issue: #2
 - **Coexistence, V1b.** Detect neighbors (Spec Kit, OpenSpec, Kiro, BMAD, Agent OS, Task Master; warn on rival memory tools) from a registry both installers read, print a who-owns-what map, and write the boundary doc. · issue: #2
 - **Template legibility pass.** Move the highest-value guidance (the decisionLog entry format) out of HTML comments into a visible example, after a real onboarding agent walked right past the commented version. Sharpen the `AGENTS.md` on-demand table wording while we're in there. · issue: #3
+- **Pester tests + Windows CI.** Mirror the bats harness (#1) in Pester for `init.ps1` and the `.ps1` hooks, plus a windows-latest job. bats covers the bash side; this is the only way to exercise the PowerShell twins. · issue: #9
 
 ## Later
 
@@ -22,6 +23,7 @@ matters most and why. New entries link to their issue once it is filed.
 - **Freshness heuristic.** Nudge to review `projectOverview.md`'s Stack when `package.json` / `pyproject.toml` / lockfiles change. Conservative by design; a noisy freshness nudge is worse than none (was C.3). · issue: #4
 - **npm/npx distribution spike.** Evaluate `npx working-memory-kit init` as an *additional* install path for version pinning and teams whose policy forbids `curl | bash`. Guardrail: it must never become the privileged path, since the kit stays language-agnostic. Decide, don't pre-commit. · issue: #5
 - **Resync scaffold-prompt.md.** Bring the standalone scaffold prompt back in line with the current templates (missing antipatterns, stale dataContracts, old decisionLog format and on-demand tables). Surfaced while doing #3, which left it alone to stay tight. · issue: #7
+- **Clean up init.sh shellcheck warnings.** #1's CI runs shellcheck at `--severity=error` to stay additive; fix the pre-existing warnings (mostly prompt_read false positives) and run at full strength. · issue: #10
 
 ## Deferred (not scheduled)
 
