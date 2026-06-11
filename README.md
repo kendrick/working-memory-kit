@@ -122,7 +122,7 @@ Slash skills (`/update-working-memory`, `/hydrate-discover`) are the most portab
 
 ## Updating the kit
 
-Re-run the installer; it will prompt before overwriting individual files. Section merges into `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` use a `## Working Memory` marker check, so re-runs will be idempotent unless you've renamed the heading.
+Re-run the installer; it will prompt before overwriting individual files. The working-memory section in `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` is wrapped in `<!-- working-memory:start -->` / `<!-- working-memory:end -->` markers, so a re-install refreshes only the text between them and leaves your surrounding content (and any neighboring tool's block) untouched. Don't hand-edit between the markers; that span is the kit's to refresh on upgrade. A section from a pre-fence install is migrated into the markers once on the next re-run.
 
 ## Repository layout
 

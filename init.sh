@@ -75,48 +75,89 @@ copy_if_absent() {
   fi
 }
 
-# Idempotency relies on the marker line. If a user renames the heading the
-# detection misses and a duplicate section gets added on re-run, which is
-# easier to spot than a silent skip. That's the trade we want.
-append_section_if_missing() {
-  local src="$1" dst="$2" marker="$3"
-  if [ ! -f "$dst" ]; then
-    mkdir -p "$(dirname "$dst")"
-    cp "$src" "$dst"
-    ok "created $dst"
-    return
-  fi
-  if grep -qF "$marker" "$dst"; then
-    info "$dst already contains working-memory section, leaving alone"
-    return
-  fi
-  printf "\n" >> "$dst"
-  cat "$src" >> "$dst"
-  ok "appended working-memory section to $dst"
+# w-m-k owns one fenced section in each agent file. A (re)install only reads and
+# replaces the text BETWEEN these markers, so a user's surrounding content and
+# any neighboring tool's block survive untouched. The span is the kit's to
+# refresh on upgrade; don't hand-edit between the markers.
+WM_START='<!-- working-memory:start -->'
+WM_END='<!-- working-memory:end -->'
+
+# The fenced-section merge lives in one perl program because the work is
+# multi-line, and BSD vs GNU sed diverge there (same reason the Stack pre-fill
+# below reaches for perl). It reads $WMK_DST, picks the case, and writes it
+# back. Exit 3 means "found an unfenced section I could not bound safely" so the
+# caller warns instead of risking the user's content.
+WMK_PERL='
+my ($start, $end, $pos, $sent) = @ENV{qw(WMK_START WMK_END WMK_POSITION WMK_SENTINEL)};
+open my $bf, "<", $ENV{WMK_BLOCK_FILE} or die "block: $!";
+my $block = do { local $/; <$bf> }; close $bf;
+$block =~ s/\n+\z//;
+open my $df, "<", $ENV{WMK_DST} or die "dst: $!";
+my $doc = do { local $/; <$df> }; close $df;
+my ($qs, $qe) = (quotemeta($start), quotemeta($end));
+
+if ($doc =~ /$qs/) {
+    # already fenced: swap the body, leave the markers and everything else
+    $doc =~ s/$qs.*?$qe/$block/s;
+}
+elsif ($doc =~ /^## Working Memory[ \t]*$/m) {
+    # legacy unfenced section: migrate it in place, exactly once
+    my @l = split /\n/, $doc, -1;
+    my ($si) = grep { $l[$_] =~ /^## Working Memory[ \t]*$/ } 0 .. $#l;
+    my $ei;
+    if (length $sent) {
+        for my $i ($si .. $#l) {
+            last if $i > $si && $l[$i] =~ /^## /;      # next H2 before the end line: bail
+            if (index($l[$i], $sent) >= 0) { $ei = $i; last; }
+        }
+    } else {
+        $ei = $#l;
+        for my $i ($si + 1 .. $#l) { if ($l[$i] =~ /^## /) { $ei = $i - 1; last; } }
+        $ei-- while $ei > $si && $l[$ei] eq "";   # keep the blank line before the next heading
+    }
+    exit 3 unless defined $ei;
+    my @pre  = $si > 0     ? @l[0 .. $si - 1]   : ();
+    my @post = $ei < $#l   ? @l[$ei + 1 .. $#l] : ();
+    $doc = join "\n", @pre, split(/\n/, $block, -1), @post;
+}
+else {
+    # no section yet: splice the fenced block in
+    if ($pos eq "prepend") { $doc = "$block\n\n$doc"; }
+    else { $doc =~ s/\n*\z//; $doc = "$doc\n\n$block\n"; }
+}
+open my $out, ">", $ENV{WMK_DST} or die "write: $!";
+print $out $doc; close $out;
+'
+
+# Pull the START..END span (inclusive) out of a fenced template, to splice into
+# an existing target.
+extract_block() {
+  WMK_START="$WM_START" WMK_END="$WM_END" perl -0777 -ne \
+    'my ($s,$e)=(quotemeta($ENV{WMK_START}),quotemeta($ENV{WMK_END})); print $1 if /($s.*?$e)/s;' "$1"
 }
 
-# Prepend variant — for files where the working-memory section is THE content
-# the agent needs to find early (CLAUDE.md, copilot-instructions.md). Long
-# pre-existing files can push an appended section past an agent's read window.
-prepend_section_if_missing() {
-  local src="$1" dst="$2" marker="$3"
+# Create / refresh / migrate / inject the kit's fenced section in $dst.
+#   fresh    = file copied verbatim when $dst is absent (the whole template, or the block)
+#   block    = the fenced START..END span to splice into an existing file
+#   position = append | prepend (only used when $dst has no section yet)
+#   sentinel = end-of-section text that bounds a legacy migration in prepend files
+upsert_fenced_section() {
+  local dst="$1" fresh="$2" block="$3" position="$4" sentinel="${5:-}"
   if [ ! -f "$dst" ]; then
     mkdir -p "$(dirname "$dst")"
-    cp "$src" "$dst"
+    cp "$fresh" "$dst"
     ok "created $dst"
     return
   fi
-  if grep -qF "$marker" "$dst"; then
-    info "$dst already contains working-memory section, leaving alone"
-    return
-  fi
-  local tmp
-  tmp=$(mktemp)
-  cat "$src" > "$tmp"
-  printf "\n" >> "$tmp"
-  cat "$dst" >> "$tmp"
-  mv "$tmp" "$dst"
-  ok "prepended working-memory section to $dst"
+  local rc=0
+  WMK_DST="$dst" WMK_BLOCK_FILE="$block" WMK_POSITION="$position" \
+  WMK_SENTINEL="$sentinel" WMK_START="$WM_START" WMK_END="$WM_END" \
+    perl -e "$WMK_PERL" || rc=$?
+  case "$rc" in
+    0) ok "updated working-memory section in $dst" ;;
+    3) warn "$dst has an unfenced Working Memory section I could not bound safely; left it as-is. Fence it by hand or remove it and re-run." ;;
+    *) fail "could not update the working-memory section in $dst"; exit 1 ;;
+  esac
 }
 
 # ---------- locate template ----------
@@ -316,10 +357,14 @@ copy_if_absent \
 
 # ---------- AGENTS.md (merge or create) ----------
 
-append_section_if_missing \
-  "$TEMPLATE/AGENTS.md" \
+AGENTS_BLOCK=$(mktemp)
+extract_block "$TEMPLATE/AGENTS.md" > "$AGENTS_BLOCK"
+upsert_fenced_section \
   "$TARGET_DIR/AGENTS.md" \
-  "## Working Memory"
+  "$TEMPLATE/AGENTS.md" \
+  "$AGENTS_BLOCK" \
+  append
+rm -f "$AGENTS_BLOCK"
 
 # Pre-fill the Stack section if (a) we detected a language and (b) the
 # placeholder comment is still present. The comment is the idempotency
@@ -367,9 +412,12 @@ if [ -d "$KIT_ROOT/.claude/skills" ]; then
   done
 fi
 
-CLAUDE_SECTION=$(mktemp)
-cat > "$CLAUDE_SECTION" <<'EOF'
-
+# Build the fenced CLAUDE block: markers from the variable, body kept literal
+# (quoted heredoc) so its backticks and slashes aren't interpreted by the shell.
+CLAUDE_BLOCK=$(mktemp)
+{
+  printf '%s\n' "$WM_START"
+  cat <<'EOF'
 ## Working Memory
 
 **AGENT INSTRUCTION:** before deciding what to read, scan the on-demand table under `## Working Memory` in [`AGENTS.md`](AGENTS.md). If your task matches a row, that file is required reading before you proceed.
@@ -377,8 +425,15 @@ cat > "$CLAUDE_SECTION" <<'EOF'
 Always read `_working-memory/activeContext.md` on session start. AGENTS.md is the canonical source for the on-demand table and update rules.
 To sync working memory, run `/update-working-memory` or invoke the `working-memory-synchronizer` agent.
 EOF
-prepend_section_if_missing "$CLAUDE_SECTION" "$TARGET_DIR/CLAUDE.md" "## Working Memory"
-rm -f "$CLAUDE_SECTION"
+  printf '%s\n' "$WM_END"
+} > "$CLAUDE_BLOCK"
+upsert_fenced_section \
+  "$TARGET_DIR/CLAUDE.md" \
+  "$CLAUDE_BLOCK" \
+  "$CLAUDE_BLOCK" \
+  prepend \
+  "To sync working memory"
+rm -f "$CLAUDE_BLOCK"
 
 # ---------- Copilot config ----------
 
@@ -394,10 +449,15 @@ copy_if_absent \
   "$TEMPLATE/.github/instructions/data-layer.instructions.md" \
   "$TARGET_DIR/.github/instructions/data-layer.instructions.md"
 
-prepend_section_if_missing \
-  "$TEMPLATE/.github/copilot-instructions.md" \
+COPILOT_BLOCK=$(mktemp)
+extract_block "$TEMPLATE/.github/copilot-instructions.md" > "$COPILOT_BLOCK"
+upsert_fenced_section \
   "$TARGET_DIR/.github/copilot-instructions.md" \
-  "## Working Memory"
+  "$TEMPLATE/.github/copilot-instructions.md" \
+  "$COPILOT_BLOCK" \
+  prepend \
+  "To sync working memory"
+rm -f "$COPILOT_BLOCK"
 
 # ---------- scripts ----------
 

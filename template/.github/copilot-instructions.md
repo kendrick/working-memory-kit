@@ -1,5 +1,6 @@
 # Copilot Project Instructions
 
+<!-- working-memory:start -->
 ## Working Memory
 
 This project maintains a two-tier working memory at `_working-memory/` for cross-session context.
@@ -9,3 +10,4 @@ This project maintains a two-tier working memory at `_working-memory/` for cross
 - **Always read on session start:** `_working-memory/activeContext.md` (≤20 lines, local only).
 - **Canonical surface:** [`AGENTS.md`](../AGENTS.md)'s `## Working Memory` section holds the on-demand table and update rules.
 - **To sync working memory:** run `/update-working-memory` in Copilot Chat, or invoke the `working-memory-synchronizer` custom agent.
+<!-- working-memory:end -->
