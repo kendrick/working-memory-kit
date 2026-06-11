@@ -21,6 +21,7 @@ matters most and why. New entries link to their issue once it is filed.
 - **Coexistence, V2.** The interactive ask-fallback for unknown tooling, `.working-memoryrc` persistence, and the conventions deferral note. Ships behind `--coexist-with` until then. · issue: #2
 - **Freshness heuristic.** Nudge to review `projectOverview.md`'s Stack when `package.json` / `pyproject.toml` / lockfiles change. Conservative by design; a noisy freshness nudge is worse than none (was C.3). · issue: #4
 - **npm/npx distribution spike.** Evaluate `npx working-memory-kit init` as an *additional* install path for version pinning and teams whose policy forbids `curl | bash`. Guardrail: it must never become the privileged path, since the kit stays language-agnostic. Decide, don't pre-commit. · issue: #5
+- **Resync scaffold-prompt.md.** Bring the standalone scaffold prompt back in line with the current templates (missing antipatterns, stale dataContracts, old decisionLog format and on-demand tables). Surfaced while doing #3, which left it alone to stay tight. · issue: #7
 
 ## Deferred (not scheduled)
 
