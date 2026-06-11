@@ -8,6 +8,7 @@
 
 <!-- Copy exact commands so agents don't guess. -->
 
+<!-- working-memory:start -->
 ## Working Memory
 
 This project uses a two-tier working memory at `_working-memory/`.
@@ -35,6 +36,7 @@ This project uses a two-tier working memory at `_working-memory/`.
 - `activeContext.md` is a queue: evict completed items to `decisionLog.md`.
 - `decisionLog.md` and `antipatterns.md` are both append-only. Never edit past entries.
 - Never let `activeContext.md` exceed 20 lines.
+<!-- working-memory:end -->
 
 ## Conventions
 

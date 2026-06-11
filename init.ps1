@@ -42,44 +42,74 @@ function Copy-IfAbsent ($src, $dst) {
     }
 }
 
-# Idempotency relies on the marker line. If a user renames the heading the
-# detection misses and a duplicate section gets added on re-run, which is
-# easier to spot than a silent skip. That's the trade we want.
-function Append-SectionIfMissing ($srcContent, $dst, $marker) {
-    if (-not (Test-Path $dst)) {
-        $parent = Split-Path $dst -Parent
-        if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-        Set-Content -Path $dst -Value $srcContent
-        Write-Ok "created $dst"
-        return
-    }
-    $current = Get-Content $dst -Raw
-    if ($current -like "*$marker*") {
-        Write-Info "$dst already contains working-memory section, leaving alone"
-        return
-    }
-    Add-Content -Path $dst -Value "`n$srcContent"
-    Write-Ok "appended working-memory section to $dst"
+# w-m-k owns one fenced section in each agent file. A (re)install only reads and
+# replaces the text BETWEEN these markers, so a user's surrounding content and
+# any neighboring tool's block survive untouched. The span is the kit's to
+# refresh on upgrade; don't hand-edit between the markers. Parity with init.sh.
+$WmStart = '<!-- working-memory:start -->'
+$WmEnd   = '<!-- working-memory:end -->'
+
+# Pull the START..END span (inclusive) out of fenced template content.
+function Get-FencedBlock ($content) {
+    $pattern = [regex]::Escape($WmStart) + '.*?' + [regex]::Escape($WmEnd)
+    return [regex]::Match($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline).Value
 }
 
-# Prepend variant — for files where the working-memory section is THE content
-# the agent needs to find early (CLAUDE.md, copilot-instructions.md). Long
-# pre-existing files can push an appended section past an agent's read window.
-function Prepend-SectionIfMissing ($srcContent, $dst, $marker) {
+# Create / refresh / migrate / inject the kit's fenced section in $dst.
+#   freshContent = written verbatim when $dst is absent (whole template, or the block)
+#   block        = the fenced START..END span to splice into an existing file
+#   position     = 'append' | 'prepend' (only used when $dst has no section yet)
+#   sentinel     = end-of-section text that bounds a legacy migration in prepend files
+function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = '') {
     if (-not (Test-Path $dst)) {
         $parent = Split-Path $dst -Parent
         if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-        Set-Content -Path $dst -Value $srcContent
+        Set-Content -Path $dst -Value $freshContent -NoNewline
         Write-Ok "created $dst"
         return
     }
-    $current = Get-Content $dst -Raw
-    if ($current -like "*$marker*") {
-        Write-Info "$dst already contains working-memory section, leaving alone"
-        return
+    $doc = Get-Content $dst -Raw
+    if ($null -eq $doc) { $doc = '' }
+    $blk = $block -replace '\s+$', ''
+
+    if ($doc.Contains($WmStart) -and $doc.Contains($WmEnd)) {
+        # already fenced: swap the body, leave the markers and everything else
+        $si = $doc.IndexOf($WmStart)
+        $ei = $doc.IndexOf($WmEnd) + $WmEnd.Length
+        $doc = $doc.Substring(0, $si) + $blk + $doc.Substring($ei)
     }
-    Set-Content -Path $dst -Value "$srcContent`n$current" -NoNewline
-    Write-Ok "prepended working-memory section to $dst"
+    elseif ($doc -match '(?m)^## Working Memory[ \t]*$') {
+        # legacy unfenced section: migrate it in place, exactly once
+        $lines = $doc -split '\r?\n', -1
+        $si = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^## Working Memory[ \t]*$') { $si = $i; break } }
+        $ei = -1
+        if ($sentinel) {
+            for ($i = $si; $i -lt $lines.Count; $i++) {
+                if ($i -gt $si -and $lines[$i] -match '^## ') { break }   # next H2 before the end line: bail
+                if ($lines[$i].Contains($sentinel)) { $ei = $i; break }
+            }
+        } else {
+            $ei = $lines.Count - 1
+            for ($i = $si + 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^## ') { $ei = $i - 1; break } }
+            while ($ei -gt $si -and $lines[$ei] -eq '') { $ei-- }   # keep the blank line before the next heading
+        }
+        if ($ei -lt 0) {
+            Write-Warn "$dst has an unfenced Working Memory section I could not bound safely; left it as-is. Fence it by hand or remove it and re-run."
+            return
+        }
+        $pre  = if ($si -gt 0) { $lines[0..($si - 1)] } else { @() }
+        $post = if ($ei -lt ($lines.Count - 1)) { $lines[($ei + 1)..($lines.Count - 1)] } else { @() }
+        $blkLines = $blk -split '\r?\n', -1
+        $doc = (@($pre) + @($blkLines) + @($post)) -join "`n"
+    }
+    else {
+        # no section yet: splice the fenced block in
+        if ($position -eq 'prepend') { $doc = "$blk`n`n$doc" }
+        else { $doc = ($doc -replace '\s+$', '') + "`n`n$blk`n" }
+    }
+    Set-Content -Path $dst -Value $doc -NoNewline
+    Write-Ok "updated working-memory section in $dst"
 }
 
 # ---------- locate template ----------
@@ -270,7 +300,8 @@ Copy-IfAbsent (Join-Path $Template '.working-memoryrc.example') `
 # ---------- AGENTS.md ----------
 
 $agentsTemplate = Get-Content (Join-Path $Template 'AGENTS.md') -Raw
-Append-SectionIfMissing $agentsTemplate (Join-Path $TargetDir 'AGENTS.md') '## Working Memory'
+$agentsBlock = Get-FencedBlock $agentsTemplate
+Set-FencedSection (Join-Path $TargetDir 'AGENTS.md') $agentsTemplate $agentsBlock 'append'
 
 # Pre-fill the Stack section if (a) we detected a language and (b) the
 # placeholder comment is still present. The comment is the idempotency
@@ -319,8 +350,7 @@ if (Test-Path $hydrateSkillsDir) {
     }
 }
 
-$claudeSection = @'
-
+$claudeBody = @'
 ## Working Memory
 
 **AGENT INSTRUCTION:** before deciding what to read, scan the on-demand table under `## Working Memory` in [`AGENTS.md`](AGENTS.md). If your task matches a row, that file is required reading before you proceed.
@@ -328,7 +358,8 @@ $claudeSection = @'
 Always read `_working-memory/activeContext.md` on session start. AGENTS.md is the canonical source for the on-demand table and update rules.
 To sync working memory, run `/update-working-memory` or invoke the `working-memory-synchronizer` agent.
 '@
-Prepend-SectionIfMissing $claudeSection (Join-Path $TargetDir 'CLAUDE.md') '## Working Memory'
+$claudeBlock = "$WmStart`n$claudeBody`n$WmEnd"
+Set-FencedSection (Join-Path $TargetDir 'CLAUDE.md') $claudeBlock $claudeBlock 'prepend' 'To sync working memory'
 
 # ---------- Copilot config ----------
 
@@ -342,7 +373,8 @@ Copy-IfAbsent (Join-Path $Template '.github\instructions\data-layer.instructions
               (Join-Path $TargetDir '.github\instructions\data-layer.instructions.md')
 
 $copilotTemplate = Get-Content (Join-Path $Template '.github\copilot-instructions.md') -Raw
-Prepend-SectionIfMissing $copilotTemplate (Join-Path $TargetDir '.github\copilot-instructions.md') '## Working Memory'
+$copilotBlock = Get-FencedBlock $copilotTemplate
+Set-FencedSection (Join-Path $TargetDir '.github\copilot-instructions.md') $copilotTemplate $copilotBlock 'prepend' 'To sync working memory'
 
 # ---------- scripts ----------
 
