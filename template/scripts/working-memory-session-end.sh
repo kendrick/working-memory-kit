@@ -23,6 +23,16 @@ read_cfg() {
 FILE_THRESHOLD="${WORKING_MEMORY_FILE_THRESHOLD:-$(read_cfg NUDGE_FILE_THRESHOLD 5)}"
 LINE_THRESHOLD="${WORKING_MEMORY_LINE_THRESHOLD:-$(read_cfg NUDGE_LINE_THRESHOLD 200)}"
 
+# A merge/rebase in progress (typically a conflicted `git pull`) leaves the
+# incoming side staged in the index, so `diff HEAD` counts commits the
+# developer never wrote: a one-line edit can read as "7 files changed." Skip
+# until it resolves; the next session-end measures cleanly. (Swapping to
+# `git diff` with no ref isn't the fix: it silently misses fully staged work.)
+GIT_DIR=$(git -C "$REPO_ROOT" rev-parse --absolute-git-dir 2>/dev/null || true)
+if [ -n "$GIT_DIR" ] && { [ -e "$GIT_DIR/MERGE_HEAD" ] || [ -d "$GIT_DIR/rebase-merge" ] || [ -d "$GIT_DIR/rebase-apply" ]; }; then
+  exit 0
+fi
+
 # --shortstat covers both signals in one git call. Format example:
 #   " 5 files changed, 200 insertions(+), 50 deletions(-)"
 # LC_ALL=C pins the shortstat output to English so the regexes below stay

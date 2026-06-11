@@ -1,0 +1,7 @@
+# Steer new issues through the templates so they arrive with the context
+# (OS, shell, tool, install method) that kit bugs almost always hinge on.
+blank_issues_enabled: false
+contact_links:
+  - name: Roadmap
+    url: https://github.com/kendrick/working-memory-kit/blob/main/ROADMAP.md
+    about: What's already planned, in priority order. Check here before filing a feature request.

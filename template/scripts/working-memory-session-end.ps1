@@ -23,6 +23,17 @@ function Get-Cfg ($key, $default) {
 $fileThreshold = if ($env:WORKING_MEMORY_FILE_THRESHOLD) { [int]$env:WORKING_MEMORY_FILE_THRESHOLD } else { [int](Get-Cfg 'NUDGE_FILE_THRESHOLD' 5) }
 $lineThreshold = if ($env:WORKING_MEMORY_LINE_THRESHOLD) { [int]$env:WORKING_MEMORY_LINE_THRESHOLD } else { [int](Get-Cfg 'NUDGE_LINE_THRESHOLD' 200) }
 
+# A merge/rebase in progress (typically a conflicted `git pull`) leaves the
+# incoming side staged in the index, so `diff HEAD` counts commits the
+# developer never wrote: a one-line edit can read as "7 files changed." Skip
+# until it resolves; the next session-end measures cleanly. (Swapping to
+# `git diff` with no ref isn't the fix: it silently misses fully staged work.)
+$gitDir = git -C $repoRoot rev-parse --absolute-git-dir 2>$null
+if ($gitDir -and (
+    (Test-Path (Join-Path $gitDir 'MERGE_HEAD')) -or
+    (Test-Path (Join-Path $gitDir 'rebase-merge')) -or
+    (Test-Path (Join-Path $gitDir 'rebase-apply')))) { exit 0 }
+
 # --shortstat covers both signals in one git call. LC_ALL=C pins the output
 # to English so the regexes below stay valid under non-default locales.
 $prevLcAll = $env:LC_ALL
