@@ -16,18 +16,18 @@ This project uses a two-tier working memory at `_working-memory/`.
 
 ### Always read on session start:
 
-- `_working-memory/activeContext.md` — Current focus, last decision, known risks (≤20 lines, local only / gitignored)
+- `_working-memory/activeContext.md`: current focus, last decision, known risks (≤20 lines, local only / gitignored)
 
 ### Read on demand:
 
-| File                 | Read when...                                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `projectOverview.md` | Starting a new feature or onboarding                                                                              |
-| `decisionLog.md`     | Making an architectural or scoping decision                                                                       |
-| `dataContracts.md`   | Creating or modifying data-consuming components                                                                   |
-| `conventions.md`     | Writing new code or reviewing patterns                                                                            |
-| `openQuestions.md`   | Encountering ambiguity — check here before guessing                                                               |
-| `antipatterns.md`    | BEFORE suggesting a refactor, library swap, or architectural change — check whether the team has already tried it |
+| File                 | Read when...                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| `projectOverview.md` | Before starting a feature, or onboarding to the codebase                                          |
+| `decisionLog.md`     | Before an architectural or scoping decision; check what's already been settled                     |
+| `dataContracts.md`   | Before creating or changing anything that produces or consumes shared data                         |
+| `conventions.md`     | Before writing new code, or when reviewing a pattern                                               |
+| `openQuestions.md`   | When you hit ambiguity; check here before guessing                                                 |
+| `antipatterns.md`    | Before proposing a refactor, library swap, or architectural change; check whether it's been tried  |
 
 ### Updating working memory:
 
