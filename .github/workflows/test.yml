@@ -32,3 +32,57 @@ jobs:
         # without failing on init.sh's pre-existing warnings (false positives
         # from the prompt_read variable indirection). Tighten later if desired.
         run: shellcheck --severity=error init.sh template/scripts/*.sh
+
+  # init.ps1 and the .ps1 hooks are parity-written against the bash side and have
+  # never run on Windows. This is the lean smoke (part of #9): does the
+  # PowerShell actually execute, fence, stay idempotent, and honor a flag. The
+  # full Pester behavioral suite is the deferred phase. Plain pwsh assertions,
+  # no Pester yet.
+  windows-smoke:
+    name: windows smoke (pwsh)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: init.ps1 runs, fences, stays idempotent, honors --coexist-with
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = (Get-Location).Path
+
+          function New-Repo ($name) {
+            $d = Join-Path $env:RUNNER_TEMP $name
+            New-Item -ItemType Directory -Path $d -Force | Out-Null
+            Set-Location $d
+            git init -q
+            git config user.email t@example.com
+            git config user.name test
+          }
+
+          # 1. fresh install scaffolds and fences
+          New-Repo 'wmk-fresh'
+          & "$repo\init.ps1"
+          if (-not (Test-Path 'AGENTS.md')) { throw 'no AGENTS.md after install' }
+          if (-not (Test-Path '_working-memory/decisionLog.md')) { throw 'no _working-memory after install' }
+          if (-not (Select-String -Path 'AGENTS.md' -Pattern 'working-memory:start' -Quiet)) { throw 'AGENTS.md is not fenced' }
+
+          # 2. re-install is idempotent (the -Raw regex fencing round-trips on Windows)
+          git add -A; git commit -q -m base
+          & "$repo\init.ps1"
+          $dirty = git status --porcelain
+          if ($dirty) { throw "re-install not idempotent:`n$dirty" }
+
+          # 3. --coexist-with wires the cross-reference into the fenced section
+          New-Repo 'wmk-coexist'
+          & "$repo\init.ps1" --coexist-with docs/specs
+          if (-not (Select-String -Path 'AGENTS.md' -Pattern 'Spec-driven tooling lives' -Quiet)) { throw 'no cross-ref from --coexist-with' }
+
+          # 4. the session-end hook executes and emits a nudge
+          New-Repo 'wmk-hook'
+          New-Item -ItemType Directory -Path '_working-memory' -Force | Out-Null
+          Set-Content -Path '.working-memoryrc' -Value "NUDGE_FILE_THRESHOLD=1`nNUDGE_LINE_THRESHOLD=1"
+          git add -A; git commit -q -m base
+          Set-Content -Path 'a.txt' -Value 'x'; Set-Content -Path 'b.txt' -Value 'y'; git add -A
+          $out = & "$repo\template\scripts\working-memory-session-end.ps1"
+          if ($out -notmatch 'systemMessage') { throw "session-end hook emitted no nudge; got: $out" }
+
+          Write-Host 'windows smoke passed'
