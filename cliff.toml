@@ -1,0 +1,65 @@
+# git-cliff configuration for working-memory-kit.
+# Generates CHANGELOG.md from the Conventional Commit history, grouped by type,
+# newest first. The kit installs from `main` and has no version tags yet, so
+# everything sits under "Unreleased" until a release is cut: `git tag vX.Y.Z`
+# then `git cliff -o CHANGELOG.md` turns it into a dated release section.
+#
+# Commits before the project adopted Conventional Commits are skipped here and
+# summarized once in the static footer, so the generated section stays clean.
+
+[changelog]
+header = """
+# Changelog
+
+Notable changes to working-memory-kit, grouped by type and generated from the Conventional Commit history with [git-cliff](https://git-cliff.org). The kit installs from `main` and is not versioned yet, so changes sit under Unreleased until a release is tagged.
+
+"""
+body = """
+{% if version -%}
+    ## {{ version | trim_start_matches(pat="v") }} ({{ timestamp | date(format="%Y-%m-%d") }})
+{% else -%}
+    ## Unreleased
+{% endif -%}
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits -%}
+        - {% if commit.scope %}*({{ commit.scope }})* {% endif %}{{ commit.message | upper_first }}
+    {% endfor -%}
+{% endfor %}
+"""
+trim = true
+footer = """
+
+## Initial development
+
+The kit's foundation, before it adopted Conventional Commits. Summarized from git history rather than listed commit by commit.
+
+- A two-tier working memory (`AGENTS.md` plus `_working-memory/`) installed by parallel bash and PowerShell scripts, with thin `CLAUDE.md` and `copilot-instructions.md` pointers.
+- The hydration pipeline (the `hydrator` agent and five `hydrate-*` skills) ships into every install, so brownfield projects get the one-time onboarding surface, not just ongoing maintenance.
+- Session hooks: a session-start directive so agents register the kit early, and a session-end nudge to refresh working memory after substantial work, with broken-pointer detection riding along.
+- One canonical location per artifact that Claude Code and Copilot both read natively: `.claude/` for cross-tool agents and skills, `.github/` reserved for Copilot-only formats.
+- Installers run under `curl | bash` and `iex (irm ...)`, reading prompts from the terminal rather than the piped script body.
+"""
+
+[git]
+conventional_commits = true
+# Drop non-Conventional commits (the pre-convention foundation, plus stray bare
+# "fix ..." subjects); they're covered once in the footer instead.
+filter_unconventional = true
+split_commits = false
+# Order is set by the hidden <!-- N --> prefix (stripped before display). The
+# trailing catch-all skips pre-Conventional-Commits history (see the footer).
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Bug Fixes" },
+  { message = "^docs", group = "<!-- 2 -->Documentation" },
+  { message = "^test", group = "<!-- 3 -->Testing" },
+  { message = "^ci", group = "<!-- 4 -->CI & Build" },
+  { message = "^perf", group = "<!-- 5 -->Performance" },
+  { message = "^refactor", group = "<!-- 6 -->Refactor" },
+  { message = "^chore", group = "<!-- 7 -->Chores" },
+  { message = ".*", skip = true },
+]
+filter_commits = false
+tag_pattern = "v[0-9]*"
+sort_commits = "newest"
