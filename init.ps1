@@ -70,6 +70,15 @@ function Get-FencedBlock ($content) {
 #   position     = 'append' | 'prepend' (only used when $dst has no section yet)
 #   sentinel     = end-of-section text that bounds a legacy migration in prepend files
 function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = '') {
+    # Normalize CRLF to LF before any write. On Windows the template checks out
+    # with CRLF, but the migration path rebuilds with LF (-join "`n") while the
+    # other paths splice the block verbatim, so a legacy migration and its re-fence
+    # would disagree on line endings and `git status` would never come clean.
+    # Forcing LF makes every path byte-identical on re-run and matches init.sh,
+    # which is LF-only. The trade is one-time: an existing CRLF file gets rewritten
+    # to LF on the first run that touches it.
+    $freshContent = $freshContent -replace "`r`n", "`n"
+    $block = $block -replace "`r`n", "`n"
     if (-not (Test-Path $dst)) {
         $parent = Split-Path $dst -Parent
         if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
@@ -79,6 +88,7 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
     }
     $doc = Get-Content $dst -Raw
     if ($null -eq $doc) { $doc = '' }
+    $doc = $doc -replace "`r`n", "`n"
     $blk = $block -replace '\s+$', ''
 
     if ($doc.Contains($WmStart) -and $doc.Contains($WmEnd)) {
