@@ -38,6 +38,8 @@ irm https://raw.githubusercontent.com/kendrick/working-memory-kit/main/init.ps1 
 
 Replace `kendrick` with the GitHub org or wherever this repo is hosted.
 
+The installer is the canonical setup. If your environment forbids piping `curl` to a shell, or you're offline, clone the repo and run `./init.sh` (or `./init.ps1`) instead. For an agent that can only edit files and can't run a script, copy `template/` into place and wrap the `## Working Memory` section of `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` in `<!-- working-memory:start -->` / `<!-- working-memory:end -->` markers, which is what the installer does.
+
 - `_working-memory/` with the six template files plus a short `README.md` for new contributors
 - `AGENTS.md` (creates one, or appends a section to your existing file). This is the canonical home for the on-demand table and update rules.
 - `.claude/agents/` and `.claude/skills/` (read by both Claude Code and VS Code Copilot):
@@ -136,7 +138,6 @@ Re-run the installer; it will prompt before overwriting individual files. The wo
 working-memory-kit/
 ├── init.sh                  # macOS/Linux installer
 ├── init.ps1                 # Windows installer
-├── scaffold-prompt.md       # Standalone prompt you can hand to any agent
 ├── CLAUDE.md                # Kit-level agent context (also auto-loaded by VS Code Copilot)
 ├── guide/                   # Practitioner-facing guides
 │   └── ai-assisted-hydration.md  # Five-phase pipeline for deeper content extraction

@@ -24,7 +24,6 @@ Files under [`template/`](template/) are **not** part of this repo's own agent s
 - Read [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md) for the hydration pipeline.
 - For skill changes, edit at `.claude/skills/`. Both tools pick them up automatically.
 - For installer changes, keep `init.sh` and `init.ps1` in parity. The `template/` parity check inside each one is the canary.
-- For scaffold-prompt changes, keep [`scaffold-prompt.md`](scaffold-prompt.md) in sync with what the installers actually do.
 
 [^vs-code-claude-md]: VS Code Copilot auto-detects `CLAUDE.md` at the workspace root and applies it as always-on custom instructions, gated by the `chat.useClaudeMdFile` setting. See [VS Code: Use custom instructions](https://code.visualstudio.com/docs/copilot/customization/custom-instructions).
 

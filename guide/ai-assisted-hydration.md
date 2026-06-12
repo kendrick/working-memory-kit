@@ -5,7 +5,7 @@ last_updated: 2026-05-08
 
 # AI-Assisted Hydration
 
-The [scaffold prompt](../scaffold-prompt.md) installs the working memory structure and pre-populates the easy parts (stack, build commands, repository structure). This page covers the deeper job: scanning the codebase, recent git history, and existing project docs to fill the working memory with content an agent will actually use across sessions.
+The installer installs the working memory structure and pre-populates the easy parts (stack, build commands, repository structure). This page covers the deeper job: scanning the codebase, recent git history, and existing project docs to fill the working memory with content an agent will actually use across sessions.
 
 The shape is five phases, run as a sequence of skills or as one combined agent depending on tooling. Each phase has a clear input and output. Human review sits at the propose step before any working memory file is written.
 
@@ -49,7 +49,7 @@ Inventory the source surface in this repo. Typical sources:
 - **Recent git history** (`git log -50`): recent decisions, recurring patterns, gotchas
 - **Code patterns** (type definitions, common imports, file naming): `conventions.md` and `dataContracts.md` candidates
 
-The discover output is a list of source locations the rest of the pipeline targets. The existing scaffold prompt covers manifests and code structure; this guide adds the deeper sources.
+The discover output is a list of source locations the rest of the pipeline targets. The installer covers manifests and code structure; this guide adds the deeper sources.
 
 ### 2. extract
 
@@ -98,13 +98,13 @@ The producing side: a periodic scan of working memory across projects, led by an
 
 ## What This Page Does Not Do
 
-- It does not replace [scaffold-prompt.md](../scaffold-prompt.md). That prompt installs the structure and the easy stack-detection pre-population. This page covers the deeper content extraction.
+- It does not replace the installer, which installs the structure and the easy stack-detection pre-population. This page covers the deeper content extraction.
 - It does not auto-write working memory files. Every phase ends with a human-reviewable artifact.
 - It does not specify per-tool integration details. Those live in `.claude/skills/`, one `SKILL.md` per phase, plus the existing Claude Code and Copilot agent definitions in `template/`.
 
 ## See Also
 
-- [scaffold-prompt.md](../scaffold-prompt.md) for the structural bootstrap
+- the installer (`init.sh` / `init.ps1`) for the structural bootstrap
 - [README.md](../README.md) for the kit overview
 - The parallel `ai-assisted-hydration.md` in `memory-bank/` (Layer 2 hydration; receiving side of the bridge)
 

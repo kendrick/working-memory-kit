@@ -4,7 +4,7 @@ description: >
   Runs the five-phase working-memory hydration pipeline — discover, extract, draft,
   reconcile, propose — to surface candidate working-memory content from a project's
   existing source artifacts for human review. Use when populating working memory
-  beyond the scaffold prompt's pre-population (deeper one-time hydration).
+  beyond the installer's pre-population (deeper one-time hydration).
 ---
 
 # Hydrator
