@@ -70,13 +70,12 @@ function Get-FencedBlock ($content) {
 #   position     = 'append' | 'prepend' (only used when $dst has no section yet)
 #   sentinel     = end-of-section text that bounds a legacy migration in prepend files
 function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = '') {
-    # Normalize CRLF to LF before any write. On Windows the template checks out
-    # with CRLF, but the migration path rebuilds with LF (-join "`n") while the
-    # other paths splice the block verbatim, so a legacy migration and its re-fence
-    # would disagree on line endings and `git status` would never come clean.
-    # Forcing LF makes every path byte-identical on re-run and matches init.sh,
-    # which is LF-only. The trade is one-time: an existing CRLF file gets rewritten
-    # to LF on the first run that touches it.
+    # We emit the block we own with LF, matching init.sh. On Windows the template
+    # checks out with CRLF, so without this the migration path (which rebuilds at
+    # LF) and a later re-fence (which splices the block verbatim) would disagree on
+    # endings and `git status` would never come clean. Content outside our markers
+    # keeps its original endings (see the raw read below), so a re-install never
+    # rewrites a user's or neighbor's line endings.
     $freshContent = $freshContent -replace "`r`n", "`n"
     $block = $block -replace "`r`n", "`n"
     if (-not (Test-Path $dst)) {
@@ -86,16 +85,19 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
         Write-Ok "created $dst"
         return
     }
-    $doc = Get-Content $dst -Raw
-    if ($null -eq $doc) { $doc = '' }
-    $doc = $doc -replace "`r`n", "`n"
+    $rawDoc = Get-Content $dst -Raw
+    if ($null -eq $rawDoc) { $rawDoc = '' }
+    # Normalized copy: used only for detection and the line parsing below. Every
+    # write splices into $rawDoc, so text outside our markers keeps its endings.
+    $doc = $rawDoc -replace "`r`n", "`n"
     $blk = $block -replace '\s+$', ''
 
     if ($doc.Contains($WmStart) -and $doc.Contains($WmEnd)) {
-        # already fenced: swap the body, leave the markers and everything else
-        $si = $doc.IndexOf($WmStart)
-        $ei = $doc.IndexOf($WmEnd) + $WmEnd.Length
-        $doc = $doc.Substring(0, $si) + $blk + $doc.Substring($ei)
+        # already fenced: swap our body, leave the markers and everything else
+        # (raw, original endings) exactly as the user and any neighbor have it.
+        $si = $rawDoc.IndexOf($WmStart)
+        $ei = $rawDoc.IndexOf($WmEnd) + $WmEnd.Length
+        $doc = $rawDoc.Substring(0, $si) + $blk + $rawDoc.Substring($ei)
     }
     elseif ($doc -match '(?m)^## Working Memory[ \t]*$') {
         # legacy unfenced section: migrate it in place, exactly once.
@@ -127,9 +129,10 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
         $doc = (@($pre) + @($blkLines) + @($post)) -join "`n"
     }
     else {
-        # no section yet: splice the fenced block in
-        if ($position -eq 'prepend') { $doc = "$blk`n`n$doc" }
-        else { $doc = ($doc -replace '\s+$', '') + "`n`n$blk`n" }
+        # no section yet: splice our block into the raw doc, preserving the user's
+        # surrounding endings.
+        if ($position -eq 'prepend') { $doc = "$blk`n`n$rawDoc" }
+        else { $doc = ($rawDoc -replace '\s+$', '') + "`n`n$blk`n" }
     }
     Set-Content -Path $dst -Value $doc -NoNewline
     Write-Ok "updated working-memory section in $dst"
