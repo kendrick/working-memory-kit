@@ -98,3 +98,54 @@ xref_inside_fence() {
   run_installer
   ! grep -q "$XREF" AGENTS.md
 }
+
+# --- V2: registering an unknown tool via flags + .working-memoryrc ---
+
+@test "--coexist-with registers an unknown path, wires it, and persists it" {
+  run run_installer --coexist-with docs/specs
+  [ "$status" -eq 0 ]
+  grep -q "$XREF.*docs/specs/" AGENTS.md
+  [ "$(xref_inside_fence)" = yes ]
+  echo "$output" | grep -q 'who owns what'
+  grep -qE '^external_spec_tooling="docs/specs"$' .working-memoryrc   # exact format, no spaces around =
+  grep -qE '^coexistence_asked=true$' .working-memoryrc
+  # a re-run WITHOUT the flag reads the rc and stays idempotent
+  git add -A; git commit -q -m base
+  run_installer
+  run git status --porcelain
+  [ -z "$output" ]
+  [ "$(grep -c "$XREF" AGENTS.md)" -eq 1 ]
+}
+
+@test "--coexist-principles points conventions.md at the principles file" {
+  run_installer --coexist-with docs/specs --coexist-principles docs/specs/STANDARDS.md
+  grep -q 'STANDARDS.md' _working-memory/conventions.md
+  grep -qE '^external_spec_principles="docs/specs/STANDARDS.md"$' .working-memoryrc
+}
+
+@test "a remembered registration in .working-memoryrc is applied with no flag" {
+  printf 'external_spec_tooling="docs/specs"\n' > .working-memoryrc
+  run_installer
+  grep -q "$XREF.*docs/specs/" AGENTS.md
+}
+
+@test "--no-coexist opts out: no wiring, no hint, remembered" {
+  run run_installer --no-coexist
+  ! grep -q "$XREF" AGENTS.md
+  ! echo "$output" | grep -q 'No spec-driven tooling detected'
+  grep -qE '^external_spec_tooling=false$' .working-memoryrc
+  grep -qE '^coexistence_asked=true$' .working-memoryrc
+}
+
+@test "no neighbor, no flag, no rc: the hint points at --coexist-with" {
+  run run_installer
+  echo "$output" | grep -q 'coexist-with'
+  ! grep -q "$XREF" AGENTS.md
+}
+
+@test "registering does not disturb existing .working-memoryrc keys" {
+  printf 'MAX_ACTIVE_CONTEXT_LINES=15\n' > .working-memoryrc
+  run_installer --coexist-with docs/specs
+  grep -qE '^MAX_ACTIVE_CONTEXT_LINES=15$' .working-memoryrc
+  grep -qE '^external_spec_tooling="docs/specs"$' .working-memoryrc
+}

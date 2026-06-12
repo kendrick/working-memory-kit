@@ -25,5 +25,5 @@ teardown_repo() {
 # installer's prompts fall through to their defaults (keep _working-memory, keep
 # existing files). This is how the suite drives it without a test-only flag.
 run_installer() {
-  bash "$KIT_ROOT/init.sh" </dev/null
+  bash "$KIT_ROOT/init.sh" "$@" </dev/null
 }
