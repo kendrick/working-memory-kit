@@ -88,8 +88,12 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
         $doc = $doc.Substring(0, $si) + $blk + $doc.Substring($ei)
     }
     elseif ($doc -match '(?m)^## Working Memory[ \t]*$') {
-        # legacy unfenced section: migrate it in place, exactly once
-        $lines = $doc -split '\r?\n', -1
+        # legacy unfenced section: migrate it in place, exactly once.
+        # Plain -split already keeps every field, trailing empties included; do
+        # NOT append a ', -1' max (Perl's "keep all" idiom). PowerShell reads a
+        # negative max as "return one element", which collapses the whole doc to
+        # a single line, so the migration finds no heading and wipes user content.
+        $lines = $doc -split '\r?\n'
         $si = -1
         for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^## Working Memory[ \t]*$') { $si = $i; break } }
         $ei = -1
@@ -109,7 +113,7 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
         }
         $pre  = if ($si -gt 0) { $lines[0..($si - 1)] } else { @() }
         $post = if ($ei -lt ($lines.Count - 1)) { $lines[($ei + 1)..($lines.Count - 1)] } else { @() }
-        $blkLines = $blk -split '\r?\n', -1
+        $blkLines = $blk -split '\r?\n'
         $doc = (@($pre) + @($blkLines) + @($post)) -join "`n"
     }
     else {
@@ -413,8 +417,11 @@ if (-not (Test-Path "$WmDir/activeContext.md")) {
 }
 
 # Skip pre-population if the placeholder marker is gone: the team has filled
-# in their overview by hand and we shouldn't clobber it on re-run.
-if ($Stack.Language -and (Get-Content "$WmDir/projectOverview.md" -Raw) -match '^_To be filled\._') {
+# in their overview by hand and we shouldn't clobber it on re-run. The (?m) is
+# load-bearing: against a -Raw whole-file string, ^ anchors to the start of the
+# string, not each line (unlike grep), so without it this guard never fires and
+# the Stack section silently goes un-prefilled.
+if ($Stack.Language -and (Get-Content "$WmDir/projectOverview.md" -Raw) -match '(?m)^_To be filled\._') {
     $repoName = Split-Path $TargetDir -Leaf
     $dirs = (Get-ChildItem -Directory | Select-Object -First 20 | ForEach-Object { "- $($_.Name)" }) -join "`n"
     $fwLine = if ($Stack.Framework) { $Stack.Framework } else { '_(none detected)_' }
