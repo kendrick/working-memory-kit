@@ -120,6 +120,10 @@ Both tools _read_ the agent files at `.claude/agents/`, but the _invocation patt
 
 Slash skills (`/update-working-memory`, `/hydrate-discover`) are the most portable invocation surface — both tools surface them via the slash menu once the SKILL.md is in place.
 
+## Coexisting with spec-driven tooling
+
+The kit stays in the durable-memory lane, so it sits cleanly next to per-feature spec tools (Spec Kit, OpenSpec, Kiro, BMAD, Agent OS, Task Master). The installer detects a neighbor, prints a who-owns-what map, cross-references it from the fenced `AGENTS.md` section, and points `conventions.md` at the neighbor's principles file so conventions stays tactical. If it finds a second durable-memory system (such as Cline/Roo Memory Bank) it warns and wires nothing, since two memory systems don't divide cleanly. The full boundary, and the rule that the kit labels these lanes rather than enforcing them, lives in the [working-memory README](template/_working-memory/README.md#working-alongside-spec-driven-tooling) the installer ships.
+
 ## Updating the kit
 
 Re-run the installer; it will prompt before overwriting individual files. The working-memory section in `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` is wrapped in `<!-- working-memory:start -->` / `<!-- working-memory:end -->` markers, so a re-install refreshes only the text between them and leaves your surrounding content (and any neighboring tool's block) untouched. Don't hand-edit between the markers; that span is the kit's to refresh on upgrade. A section from a pre-fence install is migrated into the markers once on the next re-run.

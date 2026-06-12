@@ -112,6 +112,71 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
     Write-Ok "updated working-memory section in $dst"
 }
 
+# ---------- neighbor registry (keep in sync with init.sh) ----------
+
+# External spec-driven / memory tooling the kit should coexist with.
+#   process  coexist and wire (ownership map + AGENTS cross-ref + conventions deferral)
+#   memory   warn only; two durable-memory systems don't divide cleanly
+#   note     mention only (overlaps the kit, nothing to wire)
+# Triggers are tool-unique top-level paths; a bare specs/ is never a trigger.
+$WmkNeighbors = @(
+    @{ Name = 'Spec Kit';    Kind = 'process'; Triggers = @('.specify');                Principles = '.specify/memory/constitution.md' }
+    @{ Name = 'OpenSpec';    Kind = 'process'; Triggers = @('openspec');                Principles = 'openspec/project.md' }
+    @{ Name = 'Kiro';        Kind = 'process'; Triggers = @('.kiro');                   Principles = '.kiro/steering/' }
+    @{ Name = 'BMAD';        Kind = 'process'; Triggers = @('bmad-core', '.bmad-core'); Principles = 'bmad-core/data/technical-preferences.md' }
+    @{ Name = 'Agent OS';    Kind = 'process'; Triggers = @('.agent-os');               Principles = '.agent-os/standards/' }
+    @{ Name = 'Task Master'; Kind = 'process'; Triggers = @('.taskmaster');             Principles = '' }
+    @{ Name = 'Memory Bank'; Kind = 'memory';  Triggers = @('memory-bank');             Principles = '' }
+    @{ Name = 'ADRs';        Kind = 'note';    Triggers = @('docs/adr', 'docs/decisions'); Principles = '' }
+)
+
+# Returns matched neighbors (objects with a resolved Found path) actually present
+# in the target. Mirrors detect_neighbors / detect_stack's scan-and-report shape.
+function Get-Neighbors ($targetDir) {
+    $matched = @()
+    foreach ($n in $WmkNeighbors) {
+        foreach ($t in $n.Triggers) {
+            if (Test-Path (Join-Path $targetDir $t) -PathType Container) {
+                $matched += [PSCustomObject]@{ Name = $n.Name; Kind = $n.Kind; Found = $t; Principles = $n.Principles }
+                break
+            }
+        }
+    }
+    return $matched
+}
+
+# Cross-reference paragraph for the fenced AGENTS section, from process neighbors.
+# Empty when there are none. The literal _working-memory token is rewritten later
+# if the user chose a custom dir.
+function Get-ProcessXref ($neighbors) {
+    $tools = ($neighbors | Where-Object { $_.Kind -eq 'process' } | ForEach-Object { "$($_.Name) (``$($_.Found)/``)" }) -join ', '
+    if (-not $tools) { return '' }
+    return "Spec-driven tooling lives in $tools. Per-feature specs and plans stay there; this Working Memory section is the durable project state. Boundary: see [``_working-memory/README.md``](_working-memory/README.md)."
+}
+
+# Prints the who-owns-what map for process/note neighbors and a warning for any
+# memory neighbor.
+function Write-CoexistenceSummary ($neighbors) {
+    $mapped = $neighbors | Where-Object { $_.Kind -eq 'process' -or $_.Kind -eq 'note' }
+    if ($mapped) {
+        Write-Host ''
+        Write-Info 'Coexistence: who owns what now that neighbors are present:'
+        foreach ($n in $mapped) {
+            if ($n.Kind -eq 'process') {
+                $p = if ($n.Principles) { $n.Principles } else { 'its own dir' }
+                Write-Host "  - $($n.Name) ($($n.Found)/): principles in $p; per-feature specs stay in the tool."
+            } else {
+                Write-Host "  - $($n.Name) ($($n.Found)/): overlaps decisionLog.md; left as-is, nothing wired."
+            }
+        }
+        Write-Host '  - working-memory-kit: _working-memory/ and the fenced AGENTS.md section (durable state, decisions, conventions).'
+        Write-Host "    Promote cross-cutting decisions up into _working-memory/decisionLog.md. The kit labels these lanes; it doesn't enforce them."
+    }
+    foreach ($n in ($neighbors | Where-Object { $_.Kind -eq 'memory' })) {
+        Write-Warn "Two durable-memory systems detected (working-memory-kit + $($n.Name), in $($n.Found)/). They overlap; pick one as canonical or consolidate. The kit won't auto-merge."
+    }
+}
+
 # ---------- locate template ----------
 
 # Two install paths: a cloned kit (template/ next to this script) or curl-pipe
@@ -207,6 +272,10 @@ if ($Stack.Language) {
     Write-Info "no recognized stack detected"
 }
 
+# ---------- detect neighbor tooling ----------
+
+$Neighbors = Get-Neighbors $TargetDir
+
 # ---------- working-memory directory choice ----------
 
 # Default is _working-memory (underscore prefix keeps it grouped near
@@ -289,6 +358,24 @@ $dirs
     Write-Ok "pre-populated $WmDir/projectOverview.md with detected stack"
 }
 
+# ---------- conventions deferral note (process neighbor with a principles file) ----------
+
+# Point conventions.md at the neighbor's principles file so it stays tactical and
+# doesn't restate principles. Marker-guarded so re-runs don't stack it. Uses the
+# first process neighbor that actually ships a principles file.
+$convFile = Join-Path $TargetDir "$WmDir\conventions.md"
+$principlesNeighbor = $Neighbors | Where-Object { $_.Kind -eq 'process' -and $_.Principles } | Select-Object -First 1
+if ($principlesNeighbor -and (Test-Path $convFile)) {
+    $conv = Get-Content $convFile -Raw
+    if ($conv -notmatch 'coexistence:principles') {
+        $note = "<!-- coexistence:principles -->`n> Project principles live in ``$($principlesNeighbor.Principles)`` ($($principlesNeighbor.Name)). Keep this file to tactical patterns; don't restate principles."
+        $anchor = '<!-- This is the "how we do things here" file. -->'
+        $conv = $conv -replace [regex]::Escape($anchor), "$anchor`n`n$note"
+        Set-Content -Path $convFile -Value $conv -NoNewline
+        Write-Ok "pointed $WmDir/conventions.md at $($principlesNeighbor.Name) principles ($($principlesNeighbor.Principles))"
+    }
+}
+
 # ---------- .working-memoryrc.example ----------
 
 # We ship the example, not the rc itself. Defaults are baked into the hook
@@ -300,6 +387,13 @@ Copy-IfAbsent (Join-Path $Template '.working-memoryrc.example') `
 # ---------- AGENTS.md ----------
 
 $agentsTemplate = Get-Content (Join-Path $Template 'AGENTS.md') -Raw
+# Fold the neighbor cross-reference into the template's fenced section up front,
+# so both the fresh-copy and splice paths read the same source and re-installs
+# stay idempotent.
+$agentsXref = Get-ProcessXref $Neighbors
+if ($agentsXref) {
+    $agentsTemplate = $agentsTemplate -replace [regex]::Escape($WmEnd), "$agentsXref`n`n$WmEnd"
+}
 $agentsBlock = Get-FencedBlock $agentsTemplate
 Set-FencedSection (Join-Path $TargetDir 'AGENTS.md') $agentsTemplate $agentsBlock 'append'
 
@@ -463,6 +557,9 @@ foreach ($f in $canonical) {
 }
 
 # ---------- done ----------
+
+# Coexistence summary: who owns what, plus any memory-tool overlap warning.
+Write-CoexistenceSummary $Neighbors
 
 Write-Host ''
 Write-Host 'done.' -ForegroundColor Green

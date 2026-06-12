@@ -160,6 +160,85 @@ upsert_fenced_section() {
   esac
 }
 
+# ---------- neighbor registry (keep in sync with init.ps1) ----------
+
+# External spec-driven / memory tooling the kit should coexist with. One row
+# per tool: name | kind | trigger[:alt-trigger] | principles_file
+#   process  coexist and wire (ownership map + AGENTS cross-ref + conventions deferral)
+#   memory   warn only; two durable-memory systems don't divide cleanly
+#   note     mention only (overlaps the kit, nothing to wire)
+# Triggers are tool-unique top-level paths; a bare specs/ is never a trigger.
+WMK_NEIGHBORS="Spec Kit|process|.specify|.specify/memory/constitution.md
+OpenSpec|process|openspec|openspec/project.md
+Kiro|process|.kiro|.kiro/steering/
+BMAD|process|bmad-core:.bmad-core|bmad-core/data/technical-preferences.md
+Agent OS|process|.agent-os|.agent-os/standards/
+Task Master|process|.taskmaster|
+Memory Bank|memory|memory-bank|
+ADRs|note|docs/adr:docs/decisions|"
+
+# Echoes matched rows (name|kind|found-path|principles_file), one per line, for
+# whatever neighbors are actually present in the target. Mirrors detect_stack's
+# scan-and-report shape.
+detect_neighbors() {
+  local name kind triggers principles trig found
+  while IFS='|' read -r name kind triggers principles; do
+    [ -z "$name" ] && continue
+    found=""
+    for trig in $(printf '%s' "$triggers" | tr ':' ' '); do
+      [ -d "$TARGET_DIR/$trig" ] && { found="$trig"; break; }
+    done
+    [ -n "$found" ] && printf '%s|%s|%s|%s\n' "$name" "$kind" "$found" "$principles"
+  done <<EOF
+$WMK_NEIGHBORS
+EOF
+  return 0   # a trailing unmatched row must not look like failure under set -e
+}
+
+# Cross-reference paragraph for the fenced AGENTS section, built from the
+# detected process neighbors. Empty when there are none. The literal
+# _working-memory token is rewritten later if the user chose a custom dir.
+build_process_xref() {
+  local tools="" name kind found principles
+  while IFS='|' read -r name kind found principles; do
+    [ "$kind" = process ] || continue
+    tools="${tools}${tools:+, }$name (\`$found/\`)"
+  done <<EOF
+$1
+EOF
+  [ -n "$tools" ] && printf 'Spec-driven tooling lives in %s. Per-feature specs and plans stay there; this Working Memory section is the durable project state. Boundary: see [`_working-memory/README.md`](_working-memory/README.md).' "$tools"
+  return 0   # no process neighbors is normal, not a failure
+}
+
+# Prints the who-owns-what map for process/note neighbors and a warning for any
+# memory neighbor. $1 is the detected-rows blob.
+print_coexistence_summary() {
+  local rows="$1" name kind found principles mapped=0
+  while IFS='|' read -r name kind found principles; do
+    [ -z "$name" ] && continue
+    case "$kind" in
+      process)
+        if [ "$mapped" -eq 0 ]; then say ""; info "Coexistence: who owns what now that neighbors are present:"; mapped=1; fi
+        say "  - $name ($found/): principles in ${principles:-its own dir}; per-feature specs stay in the tool."
+        ;;
+      note)
+        if [ "$mapped" -eq 0 ]; then say ""; info "Coexistence: who owns what now that neighbors are present:"; mapped=1; fi
+        say "  - $name ($found/): overlaps decisionLog.md; left as-is, nothing wired."
+        ;;
+      memory)
+        warn "Two durable-memory systems detected (working-memory-kit + $name, in $found/). They overlap; pick one as canonical or consolidate. The kit won't auto-merge."
+        ;;
+    esac
+  done <<EOF
+$rows
+EOF
+  if [ "$mapped" -eq 1 ]; then
+    say "  - working-memory-kit: _working-memory/ and the fenced AGENTS.md section (durable state, decisions, conventions)."
+    say "    Promote cross-cutting decisions up into _working-memory/decisionLog.md. The kit labels these lanes; it doesn't enforce them."
+  fi
+  return 0
+}
+
 # ---------- locate template ----------
 
 # Two install paths: a cloned kit (template/ next to this script) or curl-pipe
@@ -256,6 +335,12 @@ else
   info "no recognized stack detected (no package.json/pyproject.toml/Cargo.toml/go.mod/Gemfile)"
 fi
 
+# ---------- detect neighbor tooling ----------
+
+# Detected once here; the wiring (AGENTS cross-ref, conventions note) and the
+# printed summary downstream all read this.
+NEIGHBORS="$(detect_neighbors)"
+
 # ---------- working-memory directory choice ----------
 
 # Default is _working-memory (underscore prefix keeps it grouped near
@@ -346,6 +431,24 @@ EOF
   ok "pre-populated $WM_DIR/projectOverview.md with detected stack"
 fi
 
+# ---------- conventions deferral note (process neighbor with a principles file) ----------
+
+# Point conventions.md at the neighbor's principles file so it stays tactical
+# and doesn't restate principles. Marker-guarded so re-runs don't stack it.
+# Uses the first process neighbor that actually ships a principles file.
+CONV_FILE="$TARGET_DIR/$WM_DIR/conventions.md"
+PRINCIPLES_ROW="$(printf '%s\n' "$NEIGHBORS" | awk -F'|' '$2=="process" && $4!="" {print; exit}')"
+if [ -n "$PRINCIPLES_ROW" ] && [ -f "$CONV_FILE" ] && ! grep -qF 'coexistence:principles' "$CONV_FILE"; then
+  P_NAME="$(printf '%s' "$PRINCIPLES_ROW" | cut -d'|' -f1)"
+  P_FILE="$(printf '%s' "$PRINCIPLES_ROW" | cut -d'|' -f4)"
+  CONV_NOTE="<!-- coexistence:principles -->
+> Project principles live in \`$P_FILE\` ($P_NAME). Keep this file to tactical patterns; don't restate principles."
+  CONV_NOTE="$CONV_NOTE" perl -i -pe \
+    's{^(<!-- This is the "how we do things here" file\. -->)$}{$1\n\n$ENV{CONV_NOTE}}' \
+    "$CONV_FILE"
+  ok "pointed $WM_DIR/conventions.md at $P_NAME principles ($P_FILE)"
+fi
+
 # ---------- .working-memoryrc.example ----------
 
 # We ship the example, not the rc itself. Defaults are baked into the hook
@@ -357,14 +460,27 @@ copy_if_absent \
 
 # ---------- AGENTS.md (merge or create) ----------
 
+# Build the AGENTS source: the template with the neighbor cross-reference folded
+# into its fenced section (before the end marker) when a process neighbor is
+# present. Used for BOTH the fresh-copy and the splice paths so they agree,
+# which keeps re-installs idempotent (the post-upsert alternative fought the
+# merge's newline handling).
+AGENTS_SRC="$TEMPLATE/AGENTS.md"
+AGENTS_XREF="$(build_process_xref "$NEIGHBORS")"
+if [ -n "$AGENTS_XREF" ]; then
+  AGENTS_SRC=$(mktemp)
+  WMK_XREF="$AGENTS_XREF" WMK_END="$WM_END" perl -pe \
+    's/^\Q$ENV{WMK_END}\E\s*$/$ENV{WMK_XREF}\n\n$ENV{WMK_END}/' "$TEMPLATE/AGENTS.md" > "$AGENTS_SRC"
+fi
 AGENTS_BLOCK=$(mktemp)
-extract_block "$TEMPLATE/AGENTS.md" > "$AGENTS_BLOCK"
+extract_block "$AGENTS_SRC" > "$AGENTS_BLOCK"
 upsert_fenced_section \
   "$TARGET_DIR/AGENTS.md" \
-  "$TEMPLATE/AGENTS.md" \
+  "$AGENTS_SRC" \
   "$AGENTS_BLOCK" \
   append
 rm -f "$AGENTS_BLOCK"
+if [ "$AGENTS_SRC" != "$TEMPLATE/AGENTS.md" ]; then rm -f "$AGENTS_SRC"; fi
 
 # Pre-fill the Stack section if (a) we detected a language and (b) the
 # placeholder comment is still present. The comment is the idempotency
@@ -543,6 +659,9 @@ do
 done
 
 # ---------- done ----------
+
+# Coexistence summary: who owns what, plus any memory-tool overlap warning.
+print_coexistence_summary "$NEIGHBORS"
 
 say ""
 say "$(c_green "done.")"

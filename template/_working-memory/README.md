@@ -39,3 +39,25 @@ cp _working-memory/activeContext.example.md _working-memory/activeContext.md
 Both work. Edit directly when you know exactly what to add. Run `/update-working-memory` (or invoke the `working-memory-synchronizer` agent) when you want help proposing diffs based on recent git changes.
 
 For a one-time deeper hydration of an existing codebase — scanning code, git history, README, and ADRs to populate the files end-to-end — invoke the `hydrator` agent. That's the recommended starting move on brownfield installs.
+
+## Working alongside spec-driven tooling
+
+If this project also runs a spec-driven process tool (Spec Kit, OpenSpec, Kiro, BMAD, Agent OS, Task Master), the two layers divide cleanly. That tool owns the per-feature verbs (constitution, specs, plans, tasks); working memory owns the durable, cross-feature project state. The installer detects a neighbor and prints a who-owns-what map; this is the boundary it encodes:
+
+| Concern | Lives in |
+|---|---|
+| Inviolable principles | the neighbor's principles file (constitution / project.md / steering / standards) |
+| Tactical "how we code" | `conventions.md`, which points at the principles file and never restates it |
+| A feature's what and how | the neighbor's per-feature specs and plans |
+| Cross-feature decisions | `decisionLog.md`; per-feature rationale stays in the neighbor's plan, promoted up as a one-line pointer when it's cross-cutting |
+| Canonical data contracts | `dataContracts.md`, pointing at the neighbor's data model rather than duplicating it |
+| Current focus | `activeContext.md` |
+| Agent entry point | `AGENTS.md`; the kit's section is fenced, the neighbor keeps its own dirs |
+
+Altitude rule: the principles file states a principle; `conventions.md` encodes the concrete pattern that honors it. They nest, they don't duplicate.
+
+The kit's section in `AGENTS.md` (and in `CLAUDE.md` / `.github/copilot-instructions.md`) is wrapped in `<!-- working-memory:start -->` / `<!-- working-memory:end -->` markers, so a re-install refreshes only that span and never touches the neighbor's content. When a cross-cutting decision gets made inside a per-feature plan, promote it up into `decisionLog.md` with a one-line entry that points back down.
+
+These boundaries are a convention this kit documents, not a rule it enforces. The kit labels the lanes; keeping to them is on you and your agents.
+
+A second durable-memory system (such as Cline/Roo Memory Bank) is a different case. Two memory systems overlap, and the kit won't auto-merge them; pick one as canonical or consolidate.
