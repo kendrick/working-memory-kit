@@ -149,7 +149,7 @@ function Get-Neighbors ($targetDir) {
 # Empty when there are none. The literal _working-memory token is rewritten later
 # if the user chose a custom dir.
 function Get-ProcessXref ($neighbors) {
-    $tools = ($neighbors | Where-Object { $_.Kind -eq 'process' } | ForEach-Object { "$($_.Name) (``$($_.Found)/``)" }) -join ', '
+    $tools = ($neighbors | Where-Object { $_.Kind -eq 'process' } | ForEach-Object { if ($_.Name) { "$($_.Name) (``$($_.Found)/``)" } else { "``$($_.Found)/``" } }) -join ', '
     if (-not $tools) { return '' }
     return "Spec-driven tooling lives in $tools. Per-feature specs and plans stay there; this Working Memory section is the durable project state. Boundary: see [``_working-memory/README.md``](_working-memory/README.md)."
 }
@@ -164,7 +164,8 @@ function Write-CoexistenceSummary ($neighbors) {
         foreach ($n in $mapped) {
             if ($n.Kind -eq 'process') {
                 $p = if ($n.Principles) { $n.Principles } else { 'its own dir' }
-                Write-Host "  - $($n.Name) ($($n.Found)/): principles in $p; per-feature specs stay in the tool."
+                $label = if ($n.Name) { $n.Name } else { 'external spec tooling' }
+                Write-Host "  - $label ($($n.Found)/): principles in $p; per-feature specs stay in the tool."
             } else {
                 Write-Host "  - $($n.Name) ($($n.Found)/): overlaps decisionLog.md; left as-is, nothing wired."
             }
@@ -174,6 +175,48 @@ function Write-CoexistenceSummary ($neighbors) {
     }
     foreach ($n in ($neighbors | Where-Object { $_.Kind -eq 'memory' })) {
         Write-Warn "Two durable-memory systems detected (working-memory-kit + $($n.Name), in $($n.Found)/). They overlap; pick one as canonical or consolidate. The kit won't auto-merge."
+    }
+}
+
+# Reads a key from the live .working-memoryrc with the same parser the hooks use,
+# so what we persist stays readable.
+function Get-RcKey ($key, $default) {
+    $file = Join-Path $TargetDir '.working-memoryrc'
+    if (-not (Test-Path $file)) { return $default }
+    $line = Get-Content $file | Where-Object { $_ -match "^$key=" } | Select-Object -First 1
+    if (-not $line) { return $default }
+    $val = ($line -split '=', 2)[1].Trim().Trim('"').Trim("'")
+    if ($val) { return $val } else { return $default }
+}
+
+# Idempotent upsert of one .working-memoryrc key: replace its line or append it,
+# leaving every other key alone. Bare key=value, no spaces around =.
+function Set-RcKey ($key, $value) {
+    $file = Join-Path $TargetDir '.working-memoryrc'
+    $newLine = "$key=$value"
+    if ((Test-Path $file) -and ((Get-Content $file) -match "^$key=")) {
+        $content = Get-Content $file | ForEach-Object { if ($_ -match "^$key=") { $newLine } else { $_ } }
+        Set-Content -Path $file -Value $content
+    } else {
+        Add-Content -Path $file -Value $newLine
+    }
+}
+
+# ---------- parse args ----------
+
+# --coexist-with <path> registers external spec tooling the registry doesn't know;
+# --coexist-principles <file> pairs its principles file; --no-coexist opts out.
+$CoexistWith = ''
+$CoexistPrinciples = ''
+$NoCoexist = $false
+for ($i = 0; $i -lt $args.Count; $i++) {
+    switch -Regex ($args[$i]) {
+        '^--coexist-with=(.+)$'       { $CoexistWith = $Matches[1] }
+        '^--coexist-with$'            { if ($i + 1 -lt $args.Count) { $i++; $CoexistWith = $args[$i] } }
+        '^--coexist-principles=(.+)$' { $CoexistPrinciples = $Matches[1] }
+        '^--coexist-principles$'      { if ($i + 1 -lt $args.Count) { $i++; $CoexistPrinciples = $args[$i] } }
+        '^--no-coexist$'              { $NoCoexist = $true }
+        default                       { Write-Warn "ignoring unknown option: $($args[$i])" }
     }
 }
 
@@ -275,6 +318,39 @@ if ($Stack.Language) {
 # ---------- detect neighbor tooling ----------
 
 $Neighbors = Get-Neighbors $TargetDir
+
+# Resolve a user-registered external spec path: a flag this run beats a value
+# remembered in .working-memoryrc; --no-coexist (or a remembered opt-out) wins.
+$rcTooling = Get-RcKey 'external_spec_tooling' ''
+$registeredPath = ''
+$registeredPrinciples = ''
+if (-not $NoCoexist) {
+    if ($CoexistWith) {
+        $registeredPath = $CoexistWith.TrimEnd('/')
+        $registeredPrinciples = $CoexistPrinciples
+    } elseif ($rcTooling -and $rcTooling -ne 'false') {
+        $registeredPath = $rcTooling.TrimEnd('/')
+        $registeredPrinciples = Get-RcKey 'external_spec_principles' ''
+    }
+}
+if ($registeredPath) {
+    $Neighbors = @($Neighbors) + [PSCustomObject]@{ Name = ''; Kind = 'process'; Found = $registeredPath; Principles = $registeredPrinciples }
+}
+
+# Persist the answer so re-runs don't need the flag again. Only a flag writes.
+if ($NoCoexist) {
+    Set-RcKey 'external_spec_tooling' 'false'
+    Set-RcKey 'coexistence_asked' 'true'
+} elseif ($CoexistWith) {
+    Set-RcKey 'external_spec_tooling' "`"$registeredPath`""
+    if ($registeredPrinciples) { Set-RcKey 'external_spec_principles' "`"$registeredPrinciples`"" }
+    Set-RcKey 'coexistence_asked' 'true'
+}
+
+# Nothing known, nothing registered, never asked: point at the escape hatch once.
+if ((-not $Neighbors) -and (-not $NoCoexist) -and ((Get-RcKey 'coexistence_asked' '') -ne 'true')) {
+    Write-Info 'No spec-driven tooling detected. If this project uses some, re-run with --coexist-with <path> to register it.'
+}
 
 # ---------- working-memory directory choice ----------
 
