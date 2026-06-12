@@ -28,10 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run shellcheck
-        # --severity=error keeps this additive: it guards against real breakage
-        # without failing on init.sh's pre-existing warnings (false positives
-        # from the prompt_read variable indirection). Tighten later if desired.
-        run: shellcheck --severity=error init.sh template/scripts/*.sh
+        run: shellcheck init.sh template/scripts/*.sh
 
   # init.ps1 and the .ps1 hooks are parity-written against the bash side and have
   # never run on Windows. This is the lean smoke (part of #9): does the

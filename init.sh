@@ -39,6 +39,7 @@ prompt_read() {
     # shellcheck disable=SC2229
     read -r -u "$TTY_FD" "$__var"
   else
+    # shellcheck disable=SC2229  # same intentional indirect read as the tty branch above
     read -r "$__var" 2>/dev/null || eval "$__var=''"
   fi
 }
@@ -87,6 +88,7 @@ WM_END='<!-- working-memory:end -->'
 # below reaches for perl). It reads $WMK_DST, picks the case, and writes it
 # back. Exit 3 means "found an unfenced section I could not bound safely" so the
 # caller warns instead of risking the user's content.
+# shellcheck disable=SC2016  # single-quoted on purpose: this is a perl program, $ENV reaches perl, not the shell
 WMK_PERL='
 my ($start, $end, $pos, $sent) = @ENV{qw(WMK_START WMK_END WMK_POSITION WMK_SENTINEL)};
 open my $bf, "<", $ENV{WMK_BLOCK_FILE} or die "block: $!";
@@ -210,6 +212,7 @@ build_process_xref() {
   done <<EOF
 $1
 EOF
+  # shellcheck disable=SC2016  # the backticks are literal markdown, not command substitution
   [ -n "$tools" ] && printf 'Spec-driven tooling lives in %s. Per-feature specs and plans stay there; this Working Memory section is the durable project state. Boundary: see [`_working-memory/README.md`](_working-memory/README.md).' "$tools"
   return 0   # no process neighbors is normal, not a failure
 }
@@ -437,6 +440,7 @@ WM_DIR_DEFAULT="_working-memory"
 WM_DIR="$WM_DIR_DEFAULT"
 printf "Install working memory at %s/? [Y/n, or specify alternate path] " "$WM_DIR_DEFAULT"
 prompt_read wm_reply
+# shellcheck disable=SC2154  # wm_reply is set indirectly by prompt_read
 case "$wm_reply" in
   ""|y|Y|yes|YES) ;;
   n|N|no|NO)
@@ -506,7 +510,7 @@ $REPO_NAME — _add a one-sentence description here._
 ## Repository Structure
 <!-- Top-level directory map. Update as the layout changes. -->
 \`\`\`
-$(ls -d */ 2>/dev/null | head -20 | sed 's|/$||' | sed 's|^|- |')
+$(for d in */; do [ -d "$d" ] && printf '%s\n' "- ${d%/}"; done | head -20)
 \`\`\`
 
 ## Key Constraints
