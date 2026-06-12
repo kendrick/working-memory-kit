@@ -202,7 +202,11 @@ build_process_xref() {
   local tools="" name kind found principles
   while IFS='|' read -r name kind found principles; do
     [ "$kind" = process ] || continue
-    tools="${tools}${tools:+, }$name (\`$found/\`)"
+    if [ -n "$name" ]; then
+      tools="${tools}${tools:+, }$name (\`$found/\`)"
+    else
+      tools="${tools}${tools:+, }\`$found/\`"   # a user-registered path has no name
+    fi
   done <<EOF
 $1
 EOF
@@ -213,13 +217,14 @@ EOF
 # Prints the who-owns-what map for process/note neighbors and a warning for any
 # memory neighbor. $1 is the detected-rows blob.
 print_coexistence_summary() {
-  local rows="$1" name kind found principles mapped=0
+  local rows="$1" name kind found principles label mapped=0
   while IFS='|' read -r name kind found principles; do
-    [ -z "$name" ] && continue
+    [ -z "$kind" ] && continue   # skip blank rows, but keep a nameless registered one
     case "$kind" in
       process)
         if [ "$mapped" -eq 0 ]; then say ""; info "Coexistence: who owns what now that neighbors are present:"; mapped=1; fi
-        say "  - $name ($found/): principles in ${principles:-its own dir}; per-feature specs stay in the tool."
+        label="$name"; [ -z "$label" ] && label="external spec tooling"
+        say "  - $label ($found/): principles in ${principles:-its own dir}; per-feature specs stay in the tool."
         ;;
       note)
         if [ "$mapped" -eq 0 ]; then say ""; info "Coexistence: who owns what now that neighbors are present:"; mapped=1; fi
@@ -238,6 +243,45 @@ EOF
   fi
   return 0
 }
+
+# Reads a key from the live .working-memoryrc with the same parser the hooks use
+# (anchored on ^key=, quotes/spaces stripped), so what we persist stays readable.
+read_rc() {
+  local key="$1" default="$2" file="$TARGET_DIR/.working-memoryrc" val=""
+  [ -f "$file" ] && val=$(grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' "'\''')
+  echo "${val:-$default}"
+}
+
+# Idempotent upsert of one .working-memoryrc key: replace its line or append it,
+# leaving every other key alone. Format is bare key=value with NO spaces around
+# =, the only form read_rc and the hooks can parse.
+set_rc_key() {
+  local key="$1" value="$2" file="$TARGET_DIR/.working-memoryrc"
+  if [ -f "$file" ] && grep -qE "^${key}=" "$file"; then
+    WMK_KEY="$key" WMK_NEW="$key=$value" perl -i -pe 's/^\Q$ENV{WMK_KEY}\E=.*$/$ENV{WMK_NEW}/' "$file"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
+
+# ---------- parse args ----------
+
+# --coexist-with <path> registers external spec tooling the registry doesn't know;
+# --coexist-principles <file> pairs its principles file; --no-coexist opts out.
+# These also flow through curl|bash via `bash -s -- --coexist-with <path>`.
+COEXIST_WITH=""
+COEXIST_PRINCIPLES=""
+NO_COEXIST=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --coexist-with=*)       COEXIST_WITH="${1#*=}"; shift ;;
+    --coexist-with)         shift; if [ $# -gt 0 ]; then COEXIST_WITH="$1"; shift; fi ;;
+    --coexist-principles=*) COEXIST_PRINCIPLES="${1#*=}"; shift ;;
+    --coexist-principles)   shift; if [ $# -gt 0 ]; then COEXIST_PRINCIPLES="$1"; shift; fi ;;
+    --no-coexist)           NO_COEXIST=1; shift ;;
+    *)                      warn "ignoring unknown option: $1"; shift ;;
+  esac
+done
 
 # ---------- locate template ----------
 
@@ -340,6 +384,48 @@ fi
 # Detected once here; the wiring (AGENTS cross-ref, conventions note) and the
 # printed summary downstream all read this.
 NEIGHBORS="$(detect_neighbors)"
+
+# Resolve a user-registered external spec path: a flag this run beats a value
+# remembered in .working-memoryrc; --no-coexist (or a remembered opt-out) wins.
+RC_TOOLING="$(read_rc external_spec_tooling "")"
+REGISTERED_PATH=""
+REGISTERED_PRINCIPLES=""
+if [ "$NO_COEXIST" -ne 1 ]; then
+  if [ -n "$COEXIST_WITH" ]; then
+    REGISTERED_PATH="${COEXIST_WITH%/}"
+    REGISTERED_PRINCIPLES="$COEXIST_PRINCIPLES"
+  elif [ -n "$RC_TOOLING" ] && [ "$RC_TOOLING" != "false" ]; then
+    REGISTERED_PATH="${RC_TOOLING%/}"
+    REGISTERED_PRINCIPLES="$(read_rc external_spec_principles "")"
+  fi
+fi
+
+# A registered path joins the detected neighbors as a nameless process row, so it
+# flows through the same cross-ref / conventions / map wiring.
+if [ -n "$REGISTERED_PATH" ]; then
+  if [ -n "$NEIGHBORS" ]; then
+    NEIGHBORS="$NEIGHBORS
+|process|$REGISTERED_PATH|$REGISTERED_PRINCIPLES"
+  else
+    NEIGHBORS="|process|$REGISTERED_PATH|$REGISTERED_PRINCIPLES"
+  fi
+fi
+
+# Persist the answer so re-runs don't need the flag again. Only a flag writes;
+# reading from the rc leaves it untouched.
+if [ "$NO_COEXIST" -eq 1 ]; then
+  set_rc_key external_spec_tooling false
+  set_rc_key coexistence_asked true
+elif [ -n "$COEXIST_WITH" ]; then
+  set_rc_key external_spec_tooling "\"$REGISTERED_PATH\""
+  if [ -n "$REGISTERED_PRINCIPLES" ]; then set_rc_key external_spec_principles "\"$REGISTERED_PRINCIPLES\""; fi
+  set_rc_key coexistence_asked true
+fi
+
+# Nothing known, nothing registered, never asked: point at the escape hatch once.
+if [ -z "$NEIGHBORS" ] && [ "$NO_COEXIST" -ne 1 ] && [ "$(read_rc coexistence_asked "")" != "true" ]; then
+  info "No spec-driven tooling detected. If this project uses some, re-run with --coexist-with <path> to register it."
+fi
 
 # ---------- working-memory directory choice ----------
 

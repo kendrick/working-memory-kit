@@ -29,3 +29,17 @@ NUDGE_LINE_THRESHOLD=200
 # MAX_ACTIVE_CONTEXT_LINES=40
 # NUDGE_FILE_THRESHOLD=10
 # NUDGE_LINE_THRESHOLD=500
+
+# --- coexistence with external spec-driven tooling ---
+# The installer writes these when you pass --coexist-with / --no-coexist; you can
+# also set them by hand. Same bare key="value" form (no spaces around =).
+
+# Path to spec-driven tooling the kit should stay out of the way of (or false to
+# opt out). The installer cross-references it from the fenced AGENTS.md section.
+# external_spec_tooling="docs/specs"
+
+# Optional: that tool's principles/standards file. conventions.md is pointed here.
+# external_spec_principles="docs/specs/STANDARDS.md"
+
+# Set to true once you've answered, so the installer stops suggesting --coexist-with.
+# coexistence_asked=true
