@@ -22,7 +22,7 @@ function Write-Fail ($msg) { Write-Host "[error] $msg" -ForegroundColor Red }
 # supplied default, so init.ps1 is drivable without a console instead of
 # blocking on Read-Host.
 function Read-Prompt ($prompt, $default = '') {
-    if ([Console]::IsInputRedirected) { return $default }
+    if ($NonInteractive -or [Console]::IsInputRedirected) { return $default }
     return Read-Host $prompt
 }
 
@@ -215,9 +215,11 @@ function Set-RcKey ($key, $value) {
 
 # --coexist-with <path> registers external spec tooling the registry doesn't know;
 # --coexist-principles <file> pairs its principles file; --no-coexist opts out.
+# --yes / --non-interactive drives every prompt to its default (CI, automation).
 $CoexistWith = ''
 $CoexistPrinciples = ''
 $NoCoexist = $false
+$NonInteractive = $false
 for ($i = 0; $i -lt $args.Count; $i++) {
     switch -Regex ($args[$i]) {
         '^--coexist-with=(.+)$'       { $CoexistWith = $Matches[1] }
@@ -225,6 +227,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         '^--coexist-principles=(.+)$' { $CoexistPrinciples = $Matches[1] }
         '^--coexist-principles$'      { if ($i + 1 -lt $args.Count) { $i++; $CoexistPrinciples = $args[$i] } }
         '^--no-coexist$'              { $NoCoexist = $true }
+        '^--(yes|non-interactive)$'   { $NonInteractive = $true }
         default                       { Write-Warn "ignoring unknown option: $($args[$i])" }
     }
 }
@@ -401,17 +404,17 @@ Write-Info 'scaffolding...'
 if (-not (Test-Path $WmDir)) { New-Item -ItemType Directory -Path $WmDir | Out-Null }
 $wmFiles = @('README.md','activeContext.example.md','projectOverview.md','decisionLog.md','dataContracts.md','conventions.md','openQuestions.md','antipatterns.md')
 foreach ($f in $wmFiles) {
-    Copy-IfAbsent (Join-Path $Template "_working-memory\$f") (Join-Path $TargetDir "$WmDir\$f")
+    Copy-IfAbsent (Join-Path $Template "_working-memory/$f") (Join-Path $TargetDir "$WmDir/$f")
 }
 
-if (-not (Test-Path "$WmDir\activeContext.md")) {
-    Copy-Item "$WmDir\activeContext.example.md" "$WmDir\activeContext.md"
+if (-not (Test-Path "$WmDir/activeContext.md")) {
+    Copy-Item "$WmDir/activeContext.example.md" "$WmDir/activeContext.md"
     Write-Ok "created your local $WmDir/activeContext.md from the template"
 }
 
 # Skip pre-population if the placeholder marker is gone: the team has filled
 # in their overview by hand and we shouldn't clobber it on re-run.
-if ($Stack.Language -and (Get-Content "$WmDir\projectOverview.md" -Raw) -match '^_To be filled\._') {
+if ($Stack.Language -and (Get-Content "$WmDir/projectOverview.md" -Raw) -match '^_To be filled\._') {
     $repoName = Split-Path $TargetDir -Leaf
     $dirs = (Get-ChildItem -Directory | Select-Object -First 20 | ForEach-Object { "- $($_.Name)" }) -join "`n"
     $fwLine = if ($Stack.Framework) { $Stack.Framework } else { '_(none detected)_' }
@@ -439,7 +442,7 @@ $dirs
 <!-- Non-obvious things an agent must know: monorepo rules, legacy code -->
 <!-- boundaries, API version requirements, browser support, etc. -->
 "@
-    Set-Content -Path "$WmDir\projectOverview.md" -Value $overview
+    Set-Content -Path "$WmDir/projectOverview.md" -Value $overview
     Write-Ok "pre-populated $WmDir/projectOverview.md with detected stack"
 }
 
@@ -448,7 +451,7 @@ $dirs
 # Point conventions.md at the neighbor's principles file so it stays tactical and
 # doesn't restate principles. Marker-guarded so re-runs don't stack it. Uses the
 # first process neighbor that actually ships a principles file.
-$convFile = Join-Path $TargetDir "$WmDir\conventions.md"
+$convFile = Join-Path $TargetDir "$WmDir/conventions.md"
 $principlesNeighbor = $Neighbors | Where-Object { $_.Kind -eq 'process' -and $_.Principles } | Select-Object -First 1
 if ($principlesNeighbor -and (Test-Path $convFile)) {
     $conv = Get-Content $convFile -Raw
@@ -501,29 +504,29 @@ if ($Stack.Language) {
 
 # ---------- Claude Code config ----------
 
-foreach ($d in @('.claude\agents','.claude\skills\update-working-memory')) {
+foreach ($d in @('.claude/agents','.claude/skills/update-working-memory')) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
 Copy-IfAbsent `
-    (Join-Path $Template '.claude\agents\working-memory-synchronizer.md') `
-    (Join-Path $TargetDir '.claude\agents\working-memory-synchronizer.md')
+    (Join-Path $Template '.claude/agents/working-memory-synchronizer.md') `
+    (Join-Path $TargetDir '.claude/agents/working-memory-synchronizer.md')
 Copy-IfAbsent `
-    (Join-Path $Template '.claude\skills\update-working-memory\SKILL.md') `
-    (Join-Path $TargetDir '.claude\skills\update-working-memory\SKILL.md')
+    (Join-Path $Template '.claude/skills/update-working-memory/SKILL.md') `
+    (Join-Path $TargetDir '.claude/skills/update-working-memory/SKILL.md')
 
 # Hydration surface: composite agent + five phase skills. Sourced from the kit
 # root (not template/) since kit contributors use the same files. Optional —
 # installs cleanly if the kit version doesn't ship them yet.
-$hydratorSrc = Join-Path $KitRoot '.claude\agents\hydrator.md'
+$hydratorSrc = Join-Path $KitRoot '.claude/agents/hydrator.md'
 if (Test-Path $hydratorSrc) {
-    Copy-IfAbsent $hydratorSrc (Join-Path $TargetDir '.claude\agents\hydrator.md')
+    Copy-IfAbsent $hydratorSrc (Join-Path $TargetDir '.claude/agents/hydrator.md')
 }
-$hydrateSkillsDir = Join-Path $KitRoot '.claude\skills'
+$hydrateSkillsDir = Join-Path $KitRoot '.claude/skills'
 if (Test-Path $hydrateSkillsDir) {
     Get-ChildItem -Path $hydrateSkillsDir -Directory -Filter 'hydrate-*' | ForEach-Object {
         $skillFile = Join-Path $_.FullName 'SKILL.md'
         if (Test-Path $skillFile) {
-            $dst = Join-Path $TargetDir ".claude\skills\$($_.Name)\SKILL.md"
+            $dst = Join-Path $TargetDir ".claude/skills/$($_.Name)/SKILL.md"
             Copy-IfAbsent $skillFile $dst
         }
     }
@@ -542,18 +545,18 @@ Set-FencedSection (Join-Path $TargetDir 'CLAUDE.md') $claudeBlock $claudeBlock '
 
 # ---------- Copilot config ----------
 
-foreach ($d in @('.github\hooks','.github\instructions')) {
+foreach ($d in @('.github/hooks','.github/instructions')) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
 
-Copy-IfAbsent (Join-Path $Template '.github\hooks\working-memory-hooks.json') `
-              (Join-Path $TargetDir '.github\hooks\working-memory-hooks.json')
-Copy-IfAbsent (Join-Path $Template '.github\instructions\data-layer.instructions.md') `
-              (Join-Path $TargetDir '.github\instructions\data-layer.instructions.md')
+Copy-IfAbsent (Join-Path $Template '.github/hooks/working-memory-hooks.json') `
+              (Join-Path $TargetDir '.github/hooks/working-memory-hooks.json')
+Copy-IfAbsent (Join-Path $Template '.github/instructions/data-layer.instructions.md') `
+              (Join-Path $TargetDir '.github/instructions/data-layer.instructions.md')
 
-$copilotTemplate = Get-Content (Join-Path $Template '.github\copilot-instructions.md') -Raw
+$copilotTemplate = Get-Content (Join-Path $Template '.github/copilot-instructions.md') -Raw
 $copilotBlock = Get-FencedBlock $copilotTemplate
-Set-FencedSection (Join-Path $TargetDir '.github\copilot-instructions.md') $copilotTemplate $copilotBlock 'prepend' 'To sync working memory'
+Set-FencedSection (Join-Path $TargetDir '.github/copilot-instructions.md') $copilotTemplate $copilotBlock 'prepend' 'To sync working memory'
 
 # ---------- scripts ----------
 
@@ -592,16 +595,16 @@ if ($WmDir -ne $WmDirDefault) {
     $filesToSub = @(
         'AGENTS.md',
         'CLAUDE.md',
-        '.claude\agents\working-memory-synchronizer.md',
-        '.claude\skills\update-working-memory\SKILL.md',
-        '.github\copilot-instructions.md',
-        '.github\instructions\data-layer.instructions.md',
-        'scripts\working-memory-session-start.sh',
-        'scripts\working-memory-session-end.sh',
-        'scripts\update-working-memory.sh',
-        'scripts\working-memory-session-start.ps1',
-        'scripts\working-memory-session-end.ps1',
-        'scripts\update-working-memory.ps1'
+        '.claude/agents/working-memory-synchronizer.md',
+        '.claude/skills/update-working-memory/SKILL.md',
+        '.github/copilot-instructions.md',
+        '.github/instructions/data-layer.instructions.md',
+        'scripts/working-memory-session-start.sh',
+        'scripts/working-memory-session-end.sh',
+        'scripts/update-working-memory.sh',
+        'scripts/working-memory-session-start.ps1',
+        'scripts/working-memory-session-end.ps1',
+        'scripts/update-working-memory.ps1'
     )
     foreach ($f in $filesToSub) {
         $full = Join-Path $TargetDir $f
@@ -622,14 +625,14 @@ if ($WmDir -ne $WmDirDefault) {
 Write-Host ''
 Write-Info 'verifying canonical artifacts...'
 $canonical = @(
-    '.claude\agents\working-memory-synchronizer.md',
-    '.claude\skills\update-working-memory\SKILL.md',
-    '.claude\agents\hydrator.md',
-    '.claude\skills\hydrate-discover\SKILL.md',
-    '.claude\skills\hydrate-extract\SKILL.md',
-    '.claude\skills\hydrate-draft\SKILL.md',
-    '.claude\skills\hydrate-reconcile\SKILL.md',
-    '.claude\skills\hydrate-propose\SKILL.md'
+    '.claude/agents/working-memory-synchronizer.md',
+    '.claude/skills/update-working-memory/SKILL.md',
+    '.claude/agents/hydrator.md',
+    '.claude/skills/hydrate-discover/SKILL.md',
+    '.claude/skills/hydrate-extract/SKILL.md',
+    '.claude/skills/hydrate-draft/SKILL.md',
+    '.claude/skills/hydrate-reconcile/SKILL.md',
+    '.claude/skills/hydrate-propose/SKILL.md'
 )
 $canonicalOk = $true
 foreach ($f in $canonical) {
@@ -656,11 +659,11 @@ Write-Host '       (or run /hydrate-discover to walk the five phases one at a ti
 Write-Host '       This scans your codebase, git history, README, and ADRs to fill'
 Write-Host '       projectOverview / decisionLog / dataContracts / conventions.'
 Write-Host '       For a brand-new project, skip this step and edit the files by hand.'
-Write-Host "  2. Edit $WmDir\activeContext.md to reflect what you're working on."
+Write-Host "  2. Edit $WmDir/activeContext.md to reflect what you're working on."
 Write-Host '  3. Teammates: after cloning, run:'
-Write-Host "       Copy-Item $WmDir\activeContext.example.md $WmDir\activeContext.md"
+Write-Host "       Copy-Item $WmDir/activeContext.example.md $WmDir/activeContext.md"
 Write-Host '  4. Ongoing sync: invoke the working-memory-synchronizer agent, or'
-Write-Host '     run: .\scripts\update-working-memory.ps1'
+Write-Host '     run: ./scripts/update-working-memory.ps1'
 Write-Host '  5. To tune line limits or nudge thresholds:'
 Write-Host '       Copy-Item .working-memoryrc.example .working-memoryrc   # then edit'
 

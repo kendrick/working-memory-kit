@@ -70,7 +70,7 @@ if ($changedFiles -gt $fileThreshold -and $linesChanged -gt $lineThreshold) {
 # firing, broken pointers piggyback as extra signal in the same message.
 $extra = ''
 if ($reason) {
-    $dcFile = Join-Path $repoRoot '_working-memory\dataContracts.md'
+    $dcFile = Join-Path $repoRoot '_working-memory/dataContracts.md'
     if (Test-Path $dcFile) {
         $broken = @()
         $links = Select-String -Path $dcFile -Pattern '\]\(([^)]+)\)' -AllMatches |
