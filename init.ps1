@@ -17,9 +17,18 @@ function Write-Ok   ($msg) { Write-Host "[ok] $msg"   -ForegroundColor Green }
 function Write-Warn ($msg) { Write-Host "[warn] $msg" -ForegroundColor Yellow }
 function Write-Fail ($msg) { Write-Host "[error] $msg" -ForegroundColor Red }
 
+# Non-interactive analogue of the bash /dev/tty handling: when stdin is
+# redirected (CI, automation, a piped install) skip the prompt and take the
+# supplied default, so init.ps1 is drivable without a console instead of
+# blocking on Read-Host.
+function Read-Prompt ($prompt, $default = '') {
+    if ([Console]::IsInputRedirected) { return $default }
+    return Read-Host $prompt
+}
+
 function Confirm-Prompt ($prompt, $defaultYes = $true) {
     $hint = if ($defaultYes) { '[Y/n]' } else { '[y/N]' }
-    $reply = Read-Host "$prompt $hint"
+    $reply = Read-Prompt "$prompt $hint"
     if ([string]::IsNullOrWhiteSpace($reply)) { return $defaultYes }
     return $reply -match '^(y|yes)$'
 }
@@ -360,9 +369,9 @@ if ((-not $Neighbors) -and (-not $NoCoexist) -and ((Get-RcKey 'coexistence_asked
 # substitutes the literal token in copied template files.
 $WmDirDefault = '_working-memory'
 $WmDir = $WmDirDefault
-$reply = Read-Host "Install working memory at $WmDirDefault/? [Y/n, or specify alternate path]"
+$reply = Read-Prompt "Install working memory at $WmDirDefault/? [Y/n, or specify alternate path]"
 if ($reply -match '^(n|no)$') {
-    $custom = Read-Host 'Enter alternate path (relative to repo root)'
+    $custom = Read-Prompt 'Enter alternate path (relative to repo root)'
     if ($custom) { $WmDir = $custom.TrimEnd('/').TrimEnd('\') }
 } elseif ($reply -and $reply -notmatch '^(y|yes)$') {
     $WmDir = $reply.TrimEnd('/').TrimEnd('\')
