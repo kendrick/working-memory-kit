@@ -4,7 +4,7 @@ description: >
   Inventory the source surface for hydrating working memory in this repo.
   Surveys manifests, code structure, README, ADRs (if any), recent git history,
   and code patterns. Run once when populating working memory beyond the
-  scaffold prompt's pre-population.
+  installer's pre-population.
 ---
 
 # hydrate-discover
@@ -31,4 +31,4 @@ This skill inventories only. Pass the output to `hydrate-extract` for actual fin
 
 - Monorepos may have multiple manifests at different paths. List each.
 - A README that points elsewhere ("see our wiki") signals an external source the agent can't reach; note it but don't fabricate content.
-- The scaffold prompt already pre-populates basic stack info; this skill goes deeper, so don't skip sources just because the scaffold touched them.
+- The installer already pre-populates basic stack info; this skill goes deeper, so don't skip sources just because the installer touched them.
