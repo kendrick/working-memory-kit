@@ -2,7 +2,7 @@
 
 Notable changes to working-memory-kit, grouped by type and generated from the Conventional Commit history with [git-cliff](https://git-cliff.org). The kit installs from `main` and is not versioned yet, so changes sit under Unreleased until a release is tagged.
 
-## Unreleased
+## 0.1.0 (2026-06-12)
 
 ### Features
 - *(installer)* Register external spec tooling via flags and .working-memoryrc (#14)
@@ -18,6 +18,7 @@ Notable changes to working-memory-kit, grouped by type and generated from the Co
 - *(hooks)* Skip session-end nudge during an in-progress merge or rebase (#6)
 
 ### Documentation
+- Refresh the roadmap and generate the changelog with git-cliff (#23)
 - Retire scaffold-prompt.md in favor of the installer (#17)
 - *(templates)* Surface the decisionLog format and sharpen the on-demand table (#8)
 

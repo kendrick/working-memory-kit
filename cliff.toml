@@ -57,6 +57,7 @@ commit_parsers = [
   { message = "^ci", group = "<!-- 4 -->CI & Build" },
   { message = "^perf", group = "<!-- 5 -->Performance" },
   { message = "^refactor", group = "<!-- 6 -->Refactor" },
+  { message = "^chore\\(release\\)", skip = true },
   { message = "^chore", group = "<!-- 7 -->Chores" },
   { message = ".*", skip = true },
 ]
