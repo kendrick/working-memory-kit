@@ -2,6 +2,20 @@
 
 Notable changes to working-memory-kit, grouped by type and generated from the Conventional Commit history with [git-cliff](https://git-cliff.org). The kit installs from `main`; tagged releases appear as dated sections, and work since the last tag sits under Unreleased.
 
+## 0.2.0 (2026-07-08)
+
+### Features
+- *(installer)* Reconcile kit machinery on re-run without clobbering your edits
+
+### Bug Fixes
+- *(hydrator)* Repoint the pipeline link at the vendored skills (#26)
+
+### Documentation
+- *(changelog)* Correct the stale "not versioned yet" prose
+- *(readme)* Document the upgrade and reconcile flow
+
+### Testing
+- *(installer)* Cover the upgrade flow on both bats and Pester
 ## 0.1.0 (2026-06-12)
 
 ### Features
