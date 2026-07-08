@@ -17,6 +17,46 @@ function Write-Ok   ($msg) { Write-Host "[ok] $msg"   -ForegroundColor Green }
 function Write-Warn ($msg) { Write-Host "[warn] $msg" -ForegroundColor Yellow }
 function Write-Fail ($msg) { Write-Host "[error] $msg" -ForegroundColor Red }
 
+# Styling parity with init.sh: a modern truecolor palette when the terminal can
+# render it, plain (ASCII box, no escapes) whenever output is redirected (CI, the
+# test suite) or NO_COLOR is set. Only chrome (banner, menu box) is painted; the
+# Write-* prefixes above keep their 16-color path so nothing in the body changes.
+function Get-ColorMode {
+    if ($env:NO_COLOR -or [Console]::IsOutputRedirected) { return 'plain' }
+    if ($env:COLORTERM -match 'truecolor|24bit') { return 'truecolor' }
+    if ($PSVersionTable.PSVersion.Major -ge 7) { return 'truecolor' }
+    return '16'
+}
+$ColorMode = Get-ColorMode
+
+function Paint ($role, $text) {
+    if ($ColorMode -ne 'truecolor') { return $text }
+    $rgb = switch ($role) {
+        'primary' { '124;124;240' }
+        'success' { '74;222;128' }
+        'warn'    { '251;191;36' }
+        'error'   { '248;113;113' }
+        'muted'   { '139;147;167' }
+        default   { '' }
+    }
+    if (-not $rgb) { return $text }
+    $esc = [char]27
+    return "$esc[38;2;${rgb}m$text$esc[0m"
+}
+
+# Rounded box (ASCII when plain) around left-aligned lines, sized to the widest.
+function Write-Box ($role, [string[]] $lines) {
+    $w = 0; foreach ($l in $lines) { if ($l.Length -gt $w) { $w = $l.Length } }
+    if ($ColorMode -eq 'plain') { $tl='+';$tr='+';$bl='+';$br='+';$h='-';$v='|' }
+    else { $tl='╭';$tr='╮';$bl='╰';$br='╯';$h='─';$v='│' }
+    $rule = $h * ($w + 2)
+    Write-Host (Paint $role "$tl$rule$tr")
+    foreach ($l in $lines) {
+        Write-Host ('{0} {1}{2} {3}' -f (Paint $role $v), $l, (' ' * ($w - $l.Length)), (Paint $role $v))
+    }
+    Write-Host (Paint $role "$bl$rule$br")
+}
+
 # Non-interactive analogue of the bash /dev/tty handling: when stdin is
 # redirected (CI, automation, a piped install) skip the prompt and take the
 # supplied default, so init.ps1 is drivable without a console instead of
@@ -33,22 +73,89 @@ function Confirm-Prompt ($prompt, $defaultYes = $true) {
     return $reply -match '^(y|yes)$'
 }
 
-# Always prompts before overwriting. Re-running the installer to pick up
-# kit upgrades is expected, and a silent overwrite would clobber local edits.
+# User-owned content (the working-memory files a human fills in). Create it if
+# absent, never touch it once it exists. The upfront Upgrade/Cancel menu, not a
+# per-file prompt, governs the run. Parity with copy_if_absent in init.sh.
 function Copy-IfAbsent ($src, $dst) {
-    if (Test-Path $dst) {
-        if (Confirm-Prompt "  $dst already exists. Overwrite?" $false) {
-            Copy-Item $src $dst -Force
-            Write-Ok "overwrote $dst"
-        } else {
-            Write-Info "kept existing $dst"
+    if (Test-Path $dst) { return }
+    $parent = Split-Path $dst -Parent
+    if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    Copy-Item $src $dst
+    Write-Ok "created $dst"
+}
+
+# Kit-owned machinery: reconciled toward the shipped version on upgrade without
+# clobbering local edits. absent -> create; byte-identical -> silent; diverged ->
+# leave the live file, write the incoming version to <file>.kitnew, note it (the
+# pacman .pacnew / dpkg .dpkg-dist convention). --overwrite-machinery takes the
+# kit version outright. Parity with install_machinery in init.sh.
+$script:Diverged = @()
+$KitnewSentinel = 'working-memory-kit: a newer version of this file shipped'
+
+# Render src as this install would write it: apply the same WM-dir substitution,
+# so the divergence compare doesn't false-positive under a custom dir. Returns a
+# path (src itself, or a temp file the caller removes). WriteAllText keeps LF and
+# writes UTF8 without a BOM, matching the template bytes.
+function Get-RenderedMachinery ($src) {
+    if ($WmDir -eq $WmDirDefault) { return $src }
+    $tmp = [IO.Path]::GetTempFileName()
+    $content = ([IO.File]::ReadAllText($src)) -replace '_working-memory', $WmDir
+    [IO.File]::WriteAllText($tmp, $content)
+    return $tmp
+}
+
+function Install-Machinery ($src, $dst) {
+    $rendered = Get-RenderedMachinery $src
+    try {
+        if (-not (Test-Path $dst)) {
+            $parent = Split-Path $dst -Parent
+            if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+            Copy-Item $rendered $dst
+            Write-Ok "created $dst"
         }
-    } else {
-        $parent = Split-Path $dst -Parent
-        if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-        Copy-Item $src $dst
-        Write-Ok "created $dst"
+        elseif ((Get-FileHash $rendered).Hash -eq (Get-FileHash $dst).Hash) {
+            # identical to the shipped version: nothing to reconcile
+        }
+        elseif ($OverwriteMachinery) {
+            Copy-Item $rendered $dst -Force
+            Write-Ok "refreshed $dst (took the kit version)"
+        }
+        else {
+            Copy-Item $rendered "$dst.kitnew" -Force
+            $rel = $dst.Substring($TargetDir.Length).TrimStart('\', '/')
+            $script:Diverged += $rel
+            Add-KitnewPointer $dst
+            Write-Warn "diverged: kept your $rel; kit version written to $rel.kitnew"
+        }
+    } finally {
+        if ($rendered -ne $src -and (Test-Path $rendered)) { Remove-Item $rendered -Force }
     }
+}
+
+# One idempotent pointer noting a .kitnew sidecar. Comment-friendly types only
+# (JSON can't carry a comment; the summary covers it). Inserted after a #! shebang
+# or a --- frontmatter block so line 1 stays valid. Sentinel-guarded against
+# stacking on repeated runs, which byte-stability relies on.
+function Add-KitnewPointer ($dst) {
+    $base = Split-Path $dst -Leaf
+    $raw = [IO.File]::ReadAllText($dst)
+    if ($raw.Contains($KitnewSentinel)) { return }
+    $open = ''; $close = ''
+    if     ($dst -match '\.md(\.example)?$')              { $open = '<!-- '; $close = ' -->' }
+    elseif ($dst -match '\.(sh|ps1)$')                    { $open = '# ' }
+    elseif ($dst -match '\.working-memoryrc(\.example)?$'){ $open = '# ' }
+    else { return }
+    $note = "$open$KitnewSentinel. See $base.kitnew, merge what you want, then delete both it and this note.$close"
+    $lines = $raw -split "`n"
+    $after = 0
+    if ($lines[0] -like '#!*') { $after = 1 }
+    elseif ($lines[0] -eq '---') {
+        for ($i = 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -eq '---') { $after = $i + 1; break } }
+    }
+    if ($after -ge $lines.Count) { $new = @($lines) + $note }
+    elseif ($after -gt 0)        { $new = @($lines[0..($after - 1)]) + $note + @($lines[$after..($lines.Count - 1)]) }
+    else                         { $new = @($note) + @($lines) }
+    [IO.File]::WriteAllText($dst, ($new -join "`n"))
 }
 
 # w-m-k owns one fenced section in each agent file. A (re)install only reads and
@@ -233,10 +340,14 @@ function Set-RcKey ($key, $value) {
 # --coexist-with <path> registers external spec tooling the registry doesn't know;
 # --coexist-principles <file> pairs its principles file; --no-coexist opts out.
 # --yes / --non-interactive drives every prompt to its default (CI, automation).
+# --overwrite-machinery takes the shipped version of every kit-owned file
+# outright, skipping the .kitnew sidecars. Flag-only escape hatch for the Upgrade
+# flow (no menu item, no --force alias). Content files are never touched by it.
 $CoexistWith = ''
 $CoexistPrinciples = ''
 $NoCoexist = $false
 $NonInteractive = $false
+$OverwriteMachinery = $false
 for ($i = 0; $i -lt $args.Count; $i++) {
     switch -Regex ($args[$i]) {
         '^--coexist-with=(.+)$'       { $CoexistWith = $Matches[1] }
@@ -244,6 +355,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         '^--coexist-principles=(.+)$' { $CoexistPrinciples = $Matches[1] }
         '^--coexist-principles$'      { if ($i + 1 -lt $args.Count) { $i++; $CoexistPrinciples = $args[$i] } }
         '^--no-coexist$'              { $NoCoexist = $true }
+        '^--overwrite-machinery$'     { $OverwriteMachinery = $true }
         '^--(yes|non-interactive)$'   { $NonInteractive = $true }
         default                       { Write-Warn "ignoring unknown option: $($args[$i])" }
     }
@@ -296,7 +408,7 @@ $KitRoot = Split-Path -Parent $Template
 # ---------- intro ----------
 
 Write-Host ""
-Write-Host "working-memory-kit installer" -ForegroundColor Blue
+Write-Box 'primary' @('working-memory-kit installer')
 Write-Host "Target: $TargetDir"
 Write-Host ""
 
@@ -407,20 +519,43 @@ if (Test-Path '.github')     { $Existing += '.github/' }
 if (Test-Path 'AGENTS.md')   { $Existing += 'AGENTS.md' }
 if (Test-Path 'CLAUDE.md')   { $Existing += 'CLAUDE.md' }
 
+# $Mode drives file handling downstream. A fresh repo installs; an existing kit
+# is an upgrade (reconcile machinery, add new content, refresh fenced sections,
+# never touch edited content). No console and no flag both resolve to the safe
+# upgrade default; an interactive run gets the explicit Upgrade/Cancel choice.
+$Mode = 'install'
 if ($Existing.Count -gt 0) {
-    Write-Warn "found existing config: $($Existing -join ', ')"
-    Write-Warn "files will be merged where possible. You'll be prompted before overwrites."
-    if (-not (Confirm-Prompt 'Continue?' $true)) { Write-Host 'aborted.'; exit 0 }
+    $Mode = 'upgrade'
+    $interactive = -not ($NonInteractive -or [Console]::IsInputRedirected)
+    if ($interactive -and -not $OverwriteMachinery) {
+        Write-Host ''
+        Write-Warn "working-memory-kit is already installed here ($($Existing -join ', '))."
+        Write-Host 'Machinery the kit owns (skills, agents, hooks, scripts) reconciles toward the' -ForegroundColor DarkGray
+        Write-Host 'latest; if you changed one, the kit version lands beside it as .kitnew instead of' -ForegroundColor DarkGray
+        Write-Host 'overwriting. Your working-memory notes are never touched.' -ForegroundColor DarkGray
+        $choices = @(
+            (New-Object System.Management.Automation.Host.ChoiceDescription '&Upgrade', 'Add anything new, refresh managed sections, keep everything you edited.'),
+            (New-Object System.Management.Automation.Host.ChoiceDescription '&Cancel', 'Exit without changes.')
+        )
+        if ($Host.UI.PromptForChoice('working-memory-kit', 'An install already exists here. What would you like to do?', $choices, 0) -eq 1) {
+            $Mode = 'cancel'
+        }
+    }
+    if ($Mode -eq 'cancel') { Write-Host 'cancelled. Nothing changed.'; exit 0 }
 }
 
 Write-Host ''
-Write-Info 'scaffolding...'
+if ($Mode -eq 'upgrade') { Write-Info 'upgrading...' } else { Write-Info 'scaffolding...' }
 
 # ---------- working-memory ----------
 
 if (-not (Test-Path $WmDir)) { New-Item -ItemType Directory -Path $WmDir | Out-Null }
-$wmFiles = @('README.md','activeContext.example.md','projectOverview.md','decisionLog.md','dataContracts.md','conventions.md','openQuestions.md','antipatterns.md')
-foreach ($f in $wmFiles) {
+# The kit-authored README and the example are machinery (kit-owned, reconciled).
+# The six memory files are the user's content: seeded once, never overwritten.
+foreach ($f in @('README.md', 'activeContext.example.md')) {
+    Install-Machinery (Join-Path $Template "_working-memory/$f") (Join-Path $TargetDir "$WmDir/$f")
+}
+foreach ($f in @('projectOverview.md', 'decisionLog.md', 'dataContracts.md', 'conventions.md', 'openQuestions.md', 'antipatterns.md')) {
     Copy-IfAbsent (Join-Path $Template "_working-memory/$f") (Join-Path $TargetDir "$WmDir/$f")
 }
 
@@ -489,8 +624,8 @@ if ($principlesNeighbor -and (Test-Path $convFile)) {
 # We ship the example, not the rc itself. Defaults are baked into the hook
 # scripts; the rc is opt-in for teams that want to override line limits or
 # nudge thresholds.
-Copy-IfAbsent (Join-Path $Template '.working-memoryrc.example') `
-              (Join-Path $TargetDir '.working-memoryrc.example')
+Install-Machinery (Join-Path $Template '.working-memoryrc.example') `
+                  (Join-Path $TargetDir '.working-memoryrc.example')
 
 # ---------- AGENTS.md ----------
 
@@ -527,10 +662,10 @@ if ($Stack.Language) {
 foreach ($d in @('.claude/agents','.claude/skills/update-working-memory')) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
-Copy-IfAbsent `
+Install-Machinery `
     (Join-Path $Template '.claude/agents/working-memory-synchronizer.md') `
     (Join-Path $TargetDir '.claude/agents/working-memory-synchronizer.md')
-Copy-IfAbsent `
+Install-Machinery `
     (Join-Path $Template '.claude/skills/update-working-memory/SKILL.md') `
     (Join-Path $TargetDir '.claude/skills/update-working-memory/SKILL.md')
 
@@ -539,7 +674,7 @@ Copy-IfAbsent `
 # installs cleanly if the kit version doesn't ship them yet.
 $hydratorSrc = Join-Path $KitRoot '.claude/agents/hydrator.md'
 if (Test-Path $hydratorSrc) {
-    Copy-IfAbsent $hydratorSrc (Join-Path $TargetDir '.claude/agents/hydrator.md')
+    Install-Machinery $hydratorSrc (Join-Path $TargetDir '.claude/agents/hydrator.md')
 }
 $hydrateSkillsDir = Join-Path $KitRoot '.claude/skills'
 if (Test-Path $hydrateSkillsDir) {
@@ -547,7 +682,7 @@ if (Test-Path $hydrateSkillsDir) {
         $skillFile = Join-Path $_.FullName 'SKILL.md'
         if (Test-Path $skillFile) {
             $dst = Join-Path $TargetDir ".claude/skills/$($_.Name)/SKILL.md"
-            Copy-IfAbsent $skillFile $dst
+            Install-Machinery $skillFile $dst
         }
     }
 }
@@ -569,10 +704,13 @@ foreach ($d in @('.github/hooks','.github/instructions')) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
 
-Copy-IfAbsent (Join-Path $Template '.github/hooks/working-memory-hooks.json') `
-              (Join-Path $TargetDir '.github/hooks/working-memory-hooks.json')
-Copy-IfAbsent (Join-Path $Template '.github/instructions/data-layer.instructions.md') `
-              (Join-Path $TargetDir '.github/instructions/data-layer.instructions.md')
+Install-Machinery (Join-Path $Template '.github/hooks/working-memory-hooks.json') `
+                  (Join-Path $TargetDir '.github/hooks/working-memory-hooks.json')
+# Inert example of a path-scoped Copilot instruction wired to working memory. The
+# .example suffix keeps it out of VS Code's active *.instructions.md glob; a
+# consumer copies it to working-memory.instructions.md to switch it on.
+Install-Machinery (Join-Path $Template '.github/instructions/working-memory.instructions.md.example') `
+                  (Join-Path $TargetDir '.github/instructions/working-memory.instructions.md.example')
 
 $copilotTemplate = Get-Content (Join-Path $Template '.github/copilot-instructions.md') -Raw
 $copilotBlock = Get-FencedBlock $copilotTemplate
@@ -587,7 +725,7 @@ $scriptFiles = @(
     'update-working-memory.sh','update-working-memory.ps1'
 )
 foreach ($f in $scriptFiles) {
-    Copy-IfAbsent (Join-Path $Template "scripts\$f") (Join-Path $TargetDir "scripts\$f")
+    Install-Machinery (Join-Path $Template "scripts\$f") (Join-Path $TargetDir "scripts\$f")
 }
 Write-Info 'shell scripts: PowerShell does not need chmod. On Unix systems, run: chmod +x scripts/*.sh'
 
@@ -610,21 +748,15 @@ if (Test-Path $gitignore) {
 
 # ---------- substitute WmDir token in copied files if user overrode default ----------
 
+# Machinery files already rendered the token at write time (Install-Machinery),
+# so only the fenced files remain: they're spliced in place from the template's
+# _working-memory literal and can't be pre-rendered.
 if ($WmDir -ne $WmDirDefault) {
-    Write-Info "substituting _working-memory -> $WmDir in copied template files"
+    Write-Info "substituting _working-memory -> $WmDir in the fenced sections"
     $filesToSub = @(
         'AGENTS.md',
         'CLAUDE.md',
-        '.claude/agents/working-memory-synchronizer.md',
-        '.claude/skills/update-working-memory/SKILL.md',
-        '.github/copilot-instructions.md',
-        '.github/instructions/data-layer.instructions.md',
-        'scripts/working-memory-session-start.sh',
-        'scripts/working-memory-session-end.sh',
-        'scripts/update-working-memory.sh',
-        'scripts/working-memory-session-start.ps1',
-        'scripts/working-memory-session-end.ps1',
-        'scripts/update-working-memory.ps1'
+        '.github/copilot-instructions.md'
     )
     foreach ($f in $filesToSub) {
         $full = Join-Path $TargetDir $f
@@ -668,6 +800,17 @@ foreach ($f in $canonical) {
 
 # Coexistence summary: who owns what, plus any memory-tool overlap warning.
 Write-CoexistenceSummary $Neighbors
+
+# Divergence summary: kit files you'd edited, left untouched, with the shipped
+# version parked alongside as .kitnew. JSON has no sidecar pointer, so this is
+# the only notice it gets.
+if ($script:Diverged.Count -gt 0) {
+    Write-Host ''
+    Write-Warn "$($script:Diverged.Count) kit file(s) diverged from the shipped version and were left as you have them:"
+    foreach ($f in $script:Diverged) { Write-Host "    - $f  (kit version: $f.kitnew)" }
+    Write-Host '    Diff each against its .kitnew, merge what you want, then delete the .kitnew.'
+    Write-Host '    Or re-run with --overwrite-machinery to take every kit version at once.'
+}
 
 Write-Host ''
 Write-Host 'done.' -ForegroundColor Green
