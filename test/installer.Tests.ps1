@@ -51,4 +51,66 @@ Describe 'installer' {
         Invoke-Installer | Out-Null
         Get-Content '_working-memory/projectOverview.md' -Raw | Should -Match 'Python'
     }
+
+    # ---- upgrade flow (parity with the upgrade-flow tests in installer.bats;
+    # the interactive Upgrade/Cancel menu is driven by pty on the bash side, so
+    # here we cover the headless MODE behavior and the machinery reconciliation) ----
+
+    It 'headless re-run resolves to upgrade automatically' {
+        Invoke-Installer | Out-Null
+        git add -A; git commit -q -m base
+        Invoke-Installer | Should -Match 'upgrading'
+    }
+
+    It 'machinery divergence writes a .kitnew, keeps your edit, spares content' {
+        Invoke-Installer | Out-Null
+        Add-Content scripts/update-working-memory.ps1 "`n# local tweak"
+        Add-Content _working-memory/decisionLog.md "`nMy own decision."
+        Invoke-Installer | Out-Null
+        'scripts/update-working-memory.ps1.kitnew' | Should -Exist
+        Get-Content scripts/update-working-memory.ps1 -Raw | Should -Match 'local tweak'
+        Get-Content scripts/update-working-memory.ps1 -Raw | Should -Match 'a newer version of this file shipped'
+        Get-Content _working-memory/decisionLog.md -Raw | Should -Match 'My own decision\.'
+    }
+
+    It 'an unmodified machinery file gets no .kitnew' {
+        Invoke-Installer | Out-Null
+        git add -A; git commit -q -m base
+        Invoke-Installer | Out-Null
+        @(Get-ChildItem -Recurse -File | Where-Object { $_.Name -like '*.kitnew' }).Count | Should -Be 0
+    }
+
+    It 'a diverged upgrade is byte-stable on the next run' {
+        Invoke-Installer | Out-Null
+        Add-Content scripts/update-working-memory.ps1 "`n# local tweak"
+        Invoke-Installer | Out-Null
+        $before = Get-Content scripts/update-working-memory.ps1 -Raw
+        Invoke-Installer | Out-Null
+        Get-Content scripts/update-working-memory.ps1 -Raw | Should -BeExactly $before
+        Get-MatchCount 'scripts/update-working-memory.ps1' 'a newer version of this file shipped' | Should -Be 1
+    }
+
+    It '--overwrite-machinery takes the kit version and spares content' {
+        Invoke-Installer | Out-Null
+        Add-Content scripts/update-working-memory.ps1 "`n# local tweak"
+        Add-Content _working-memory/decisionLog.md "`nMy own decision."
+        Invoke-Installer --overwrite-machinery | Out-Null
+        Get-Content scripts/update-working-memory.ps1 -Raw | Should -Not -Match 'local tweak'
+        Get-Content _working-memory/decisionLog.md -Raw | Should -Match 'My own decision\.'
+    }
+
+    It 'additive: a missing content file is restored on upgrade' {
+        Invoke-Installer | Out-Null
+        Add-Content _working-memory/decisionLog.md "`nMy own decision."
+        Remove-Item _working-memory/antipatterns.md
+        Invoke-Installer | Out-Null
+        '_working-memory/antipatterns.md' | Should -Exist
+        Get-Content _working-memory/decisionLog.md -Raw | Should -Match 'My own decision\.'
+    }
+
+    It 'the Copilot instructions example ships inert' {
+        Invoke-Installer | Out-Null
+        '.github/instructions/working-memory.instructions.md.example' | Should -Exist
+        @(Get-ChildItem .github/instructions -File | Where-Object { $_.Name -like '*.instructions.md' }).Count | Should -Be 0
+    }
 }
