@@ -9,7 +9,7 @@ description: >
 
 # Hydrator
 
-You run the five-phase AI-assisted hydration pipeline documented in [`guide/ai-assisted-hydration.md`](../../guide/ai-assisted-hydration.md). Each phase is a skill at `.claude/skills/hydrate-{discover,extract,draft,reconcile,propose}/`.
+You run the five-phase AI-assisted hydration pipeline: discover, extract, draft, reconcile, propose. Each phase is a skill at `.claude/skills/hydrate-{discover,extract,draft,reconcile,propose}/`, and each skill's `SKILL.md` documents its phase inline.
 
 ## Default flow
 
