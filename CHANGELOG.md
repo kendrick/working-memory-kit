@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to working-memory-kit, grouped by type and generated from the Conventional Commit history with [git-cliff](https://git-cliff.org). The kit installs from `main` and is not versioned yet, so changes sit under Unreleased until a release is tagged.
+Notable changes to working-memory-kit, grouped by type and generated from the Conventional Commit history with [git-cliff](https://git-cliff.org). The kit installs from `main`; tagged releases appear as dated sections, and work since the last tag sits under Unreleased.
 
 ## 0.1.0 (2026-06-12)
 

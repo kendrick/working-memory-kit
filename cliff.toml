@@ -1,8 +1,8 @@
 # git-cliff configuration for working-memory-kit.
 # Generates CHANGELOG.md from the Conventional Commit history, grouped by type,
-# newest first. The kit installs from `main` and has no version tags yet, so
-# everything sits under "Unreleased" until a release is cut: `git tag vX.Y.Z`
-# then `git cliff -o CHANGELOG.md` turns it into a dated release section.
+# newest first. The kit installs from `main`; tagged releases become dated
+# sections and everything since the last tag sits under "Unreleased". To cut a
+# release: `git tag vX.Y.Z` then `git cliff -o CHANGELOG.md`.
 #
 # Commits before the project adopted Conventional Commits are skipped here and
 # summarized once in the static footer, so the generated section stays clean.
@@ -11,7 +11,7 @@
 header = """
 # Changelog
 
-Notable changes to working-memory-kit, grouped by type and generated from the Conventional Commit history with [git-cliff](https://git-cliff.org). The kit installs from `main` and is not versioned yet, so changes sit under Unreleased until a release is tagged.
+Notable changes to working-memory-kit, grouped by type and generated from the Conventional Commit history with [git-cliff](https://git-cliff.org). The kit installs from `main`; tagged releases appear as dated sections, and work since the last tag sits under Unreleased.
 
 """
 body = """
