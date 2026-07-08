@@ -57,3 +57,98 @@ teardown() { teardown_repo; }
   run_installer
   grep -q 'Python' _working-memory/projectOverview.md
 }
+
+# ---- upgrade flow ----
+
+@test "headless re-run resolves to upgrade automatically" {
+  run_installer
+  git add -A; git commit -q -m base
+  run run_installer
+  [[ "$output" == *"upgrading..."* ]]
+}
+
+@test "upgrade menu: choosing Cancel changes nothing" {
+  run_installer
+  git add -A; git commit -q -m base
+  # feed the wm-dir prompt (enter = default), then 'c' for Cancel
+  run run_installer_tty $'\nc\n'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cancelled"* ]]
+  run git status --porcelain
+  [ -z "$output" ]
+}
+
+@test "upgrade menu: choosing Upgrade proceeds" {
+  run_installer
+  git add -A; git commit -q -m base
+  run run_installer_tty $'\nu\n'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"upgrading"* ]]
+}
+
+@test "machinery divergence writes a .kitnew, keeps your edit, spares content" {
+  run_installer
+  printf '\n# local tweak\n' >> scripts/update-working-memory.sh
+  printf '\nMy own decision.\n' >> _working-memory/decisionLog.md
+  run_installer
+  [ -f scripts/update-working-memory.sh.kitnew ]                       # sidecar written
+  grep -q 'local tweak' scripts/update-working-memory.sh              # your edit kept
+  grep -q 'a newer version of this file shipped' scripts/update-working-memory.sh  # pointer added
+  [[ "$(head -1 scripts/update-working-memory.sh)" == '#!'* ]]         # pointer sits after the shebang
+  grep -q 'My own decision.' _working-memory/decisionLog.md            # content untouched
+}
+
+@test "an unmodified machinery file gets no .kitnew" {
+  run_installer
+  git add -A; git commit -q -m base
+  run_installer
+  run find . -name '*.kitnew'
+  [ -z "$output" ]
+}
+
+@test "a diverged upgrade is byte-stable on the next run" {
+  run_installer
+  printf '\n# local tweak\n' >> scripts/update-working-memory.sh
+  run_installer                                  # first upgrade: .kitnew + pointer
+  cp scripts/update-working-memory.sh "$BATS_TEST_TMPDIR/stable"
+  run_installer                                  # second upgrade: live file must not move
+  diff -q "$BATS_TEST_TMPDIR/stable" scripts/update-working-memory.sh
+  [ "$(grep -c 'a newer version of this file shipped' scripts/update-working-memory.sh)" -eq 1 ]
+}
+
+@test "--overwrite-machinery takes the kit version and spares content" {
+  run_installer
+  printf '\n# local tweak\n' >> scripts/update-working-memory.sh
+  printf '\nMy own decision.\n' >> _working-memory/decisionLog.md
+  run_installer --overwrite-machinery
+  ! grep -q 'local tweak' scripts/update-working-memory.sh            # kit version taken
+  grep -q 'My own decision.' _working-memory/decisionLog.md           # content still spared
+}
+
+@test "additive: a missing content file is restored on upgrade" {
+  run_installer
+  printf '\nMy own decision.\n' >> _working-memory/decisionLog.md
+  rm _working-memory/antipatterns.md
+  run_installer
+  [ -f _working-memory/antipatterns.md ]                             # restored
+  grep -q 'My own decision.' _working-memory/decisionLog.md          # existing content untouched
+}
+
+@test "the Copilot instructions example ships inert" {
+  run_installer
+  [ -f .github/instructions/working-memory.instructions.md.example ]
+  # nothing VS Code's active *.instructions.md glob would pick up
+  run find .github/instructions -name '*.instructions.md'
+  [ -z "$output" ]
+}
+
+@test "a custom working-memory dir re-runs clean" {
+  run_installer_tty $'mem\n'                     # fresh install into mem/
+  [ -d mem ]
+  git add -A; git commit -q -m base
+  run_installer_tty $'mem\nu\n'                  # re-run, choose Upgrade
+  run git status --porcelain
+  [ -z "$output" ]
+  run find . -name '*.kitnew'
+  [ -z "$output" ]
+}
