@@ -45,7 +45,7 @@ The installer is the canonical setup. If your environment forbids piping `curl` 
 - `.claude/agents/` and `.claude/skills/` (read by both Claude Code and VS Code Copilot):
   - `working-memory-synchronizer` agent and `update-working-memory` skill — the **ongoing maintenance** surface.
   - `hydrator` agent and `hydrate-{discover,extract,draft,reconcile,propose}` skills — the **one-time onboarding** surface for brownfield installs.
-- `.github/hooks/working-memory-hooks.json` and `.github/instructions/data-layer.instructions.md` if your project uses GitHub Copilot (these formats are Copilot-specific)
+- `.github/hooks/working-memory-hooks.json` and `.github/instructions/working-memory.instructions.md.example` if your project uses GitHub Copilot (these formats are Copilot-specific; the `.example` is an inert sample you copy to `working-memory.instructions.md` to switch on)
 - `.github/copilot-instructions.md` (creates or prepends a thin pointer to `AGENTS.md`)
 - `CLAUDE.md` (prepends a thin pointer to `AGENTS.md`)
 - `scripts/` with cross-platform `.sh` and `.ps1` hooks
@@ -130,7 +130,15 @@ For a tool the registry doesn't know, register it explicitly: `init.sh --coexist
 
 ## Updating the kit
 
-Re-run the installer; it will prompt before overwriting individual files. The working-memory section in `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` is wrapped in `<!-- working-memory:start -->` / `<!-- working-memory:end -->` markers, so a re-install refreshes only the text between them and leaves your surrounding content (and any neighboring tool's block) untouched. Don't hand-edit between the markers; that span is the kit's to refresh on upgrade. A section from a pre-fence install is migrated into the markers once on the next re-run.
+Re-run the installer. It detects an existing install and offers **Upgrade** or **Cancel**; a piped or headless run takes Upgrade on its own.
+
+Upgrade adds any files the kit has gained since you installed, refreshes the managed section inside `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` (the span between the `<!-- working-memory:start -->` / `<!-- working-memory:end -->` markers, so your surrounding content and any neighboring tool's block stay put), and reconciles the kit's own machinery: the skills, agents, hooks, and scripts.
+
+Reconcile means the kit never clobbers a file you changed. A machinery file that still matches what the kit ships gets the newer version silently. One you've edited, the kit leaves alone: it writes its version beside yours as `<file>.kitnew` and lists what diverged at the end of the run. Diff the pair, merge what you want, then delete the `.kitnew`. Your working-memory notes (`projectOverview.md`, `decisionLog.md`, and the rest) are content, not machinery, so they're seeded once and never touched.
+
+To take every kit version at once and skip the sidecars, re-run with `--overwrite-machinery` (through the pipe: `curl -fsSL … | bash -s -- --overwrite-machinery`). It still won't touch your notes.
+
+Don't hand-edit between the fence markers; that span is the kit's to refresh. A section from a pre-fence install is migrated into the markers once on the next run.
 
 ## Repository layout
 
