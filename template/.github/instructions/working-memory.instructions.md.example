@@ -1,0 +1,22 @@
+---
+applyTo: "**/CHANGE-ME/**"
+---
+
+<!--
+  Example: a path-scoped Copilot instruction wired to working memory.
+
+  VS Code applies a file in .github/instructions/ only when its name ends in
+  `.instructions.md`. This one ends in `.example`, so it stays inert. To switch
+  it on: copy it to `working-memory.instructions.md` (drop `.example`), then edit
+  `applyTo` above to the glob you care about: the paths where an agent should
+  read a working-memory file before touching code.
+
+  The pattern: name the working-memory file that governs a slice of the repo, so
+  an agent editing that slice reads the durable context first. The data-layer
+  case below is just an illustration; swap it for whatever your project has.
+-->
+
+When working on files matched by `applyTo`, read the relevant `_working-memory/`
+file first and conform to it. For a data or API layer, that's
+`_working-memory/dataContracts.md`: treat the interfaces there as the contract,
+and update that file before you change a shape rather than after.
