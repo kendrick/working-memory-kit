@@ -13,16 +13,72 @@ BRANCH="${WORKING_MEMORY_KIT_BRANCH:-main}"
 
 # ---------- helpers ----------
 
-c_blue()  { printf "\033[34m%s\033[0m" "$1"; }
-c_green() { printf "\033[32m%s\033[0m" "$1"; }
-c_yellow(){ printf "\033[33m%s\033[0m" "$1"; }
-c_red()   { printf "\033[31m%s\033[0m" "$1"; }
+# Detect once how much color the terminal can render. Plain wins whenever output
+# isn't a user-facing tty (piped installs, CI, the test suite) or NO_COLOR is
+# set, so escapes never leak into captured output or a test's assertions. Only
+# label prefixes and chrome (banner, menu box) get painted; message bodies stay
+# plain so downstream greps still match.
+COLOR_DEPTH="plain"
+if [ -z "${NO_COLOR:-}" ] && [ -t 1 ] && [ "${TERM:-dumb}" != "dumb" ]; then
+  case "${COLORTERM:-}" in
+    truecolor|24bit) COLOR_DEPTH="truecolor" ;;
+    *)
+      _tc="$(tput colors 2>/dev/null || echo 0)"
+      if   [ "$_tc" -ge 256 ] 2>/dev/null; then COLOR_DEPTH="256"
+      elif [ "$_tc" -ge 8 ]   2>/dev/null; then COLOR_DEPTH="16"
+      fi
+      ;;
+  esac
+fi
+
+# Modern six-role palette (indigo/teal/amber/red/slate), one cohesive scheme
+# across every tier. paint <role> <text> wraps text in the role's color for the
+# detected depth, or returns it bare when plain.
+paint() {
+  local role="$1"; shift
+  local text="$*" rgb i256 i16
+  case "$role" in
+    primary) rgb='124;124;240'; i256=99;  i16=35 ;;
+    success) rgb='74;222;128';  i256=42;  i16=32 ;;
+    warn)    rgb='251;191;36';  i256=214; i16=33 ;;
+    error)   rgb='248;113;113'; i256=203; i16=31 ;;
+    muted)   rgb='139;147;167'; i256=102; i16=90 ;;
+    *)       printf '%s' "$text"; return ;;
+  esac
+  case "$COLOR_DEPTH" in
+    truecolor) printf '\033[38;2;%sm%s\033[0m' "$rgb"  "$text" ;;
+    256)       printf '\033[38;5;%sm%s\033[0m' "$i256" "$text" ;;
+    16)        printf '\033[%sm%s\033[0m'      "$i16"  "$text" ;;
+    *)         printf '%s' "$text" ;;
+  esac
+}
 
 say()   { printf "%s\n" "$*"; }
-info()  { printf "%s %s\n" "$(c_blue "[info]")" "$*"; }
-ok()    { printf "%s %s\n" "$(c_green "[ok]")" "$*"; }
-warn()  { printf "%s %s\n" "$(c_yellow "[warn]")" "$*"; }
-fail()  { printf "%s %s\n" "$(c_red "[error]")" "$*" >&2; }
+info()  { printf "%s %s\n" "$(paint primary "[info]")" "$*"; }
+ok()    { printf "%s %s\n" "$(paint success "[ok]")" "$*"; }
+warn()  { printf "%s %s\n" "$(paint warn "[warn]")" "$*"; }
+fail()  { printf "%s %s\n" "$(paint error "[error]")" "$*" >&2; }
+
+# repeat a single char N times (box rules). Plain-ASCII fallback lives in the
+# box drawers themselves.
+repeat() { local c="$1" n="$2" out=""; while [ "$n" -gt 0 ]; do out="$out$c"; n=$((n - 1)); done; printf '%s' "$out"; }
+
+# A rounded box (ASCII when plain) around one or more left-aligned lines, sized
+# to the widest line. Border painted in $1's role; line text stays plain so its
+# width math and any downstream matching hold.
+draw_box() {
+  local role="$1"; shift
+  local lines=("$@") w=0 l tl tr bl br h v
+  for l in "${lines[@]}"; do [ "${#l}" -gt "$w" ] && w="${#l}"; done
+  if [ "$COLOR_DEPTH" = "plain" ]; then tl='+'; tr='+'; bl='+'; br='+'; h='-'; v='|'
+  else tl='╭'; tr='╮'; bl='╰'; br='╯'; h='─'; v='│'; fi
+  local rule; rule="$(repeat "$h" "$((w + 2))")"
+  say "$(paint "$role" "${tl}${rule}${tr}")"
+  for l in "${lines[@]}"; do
+    printf '%s %s%s %s\n' "$(paint "$role" "$v")" "$l" "$(repeat ' ' "$((w - ${#l}))")" "$(paint "$role" "$v")"
+  done
+  say "$(paint "$role" "${bl}${rule}${br}")"
+}
 
 # Under `curl | bash`, stdin is the script body, not the keyboard. Re-open
 # /dev/tty for prompts so the user can actually answer. If there's no tty
@@ -58,22 +114,93 @@ confirm() {
   esac
 }
 
-# Always prompts before overwriting. Re-running the installer to pick up
-# kit upgrades is expected, and a silent overwrite would clobber local edits.
+# User-owned content (the working-memory files a human fills in). Create it if
+# absent, never touch it once it exists. The upfront Upgrade/Cancel menu, not a
+# per-file prompt, governs the run, so there's nothing to ask here.
 copy_if_absent() {
   local src="$1" dst="$2"
-  if [ -e "$dst" ]; then
-    if confirm "  $dst already exists. Overwrite?" "n"; then
-      cp "$src" "$dst"
-      ok "overwrote $dst"
-    else
-      info "kept existing $dst"
-    fi
+  [ -e "$dst" ] && return 0
+  mkdir -p "$(dirname "$dst")"
+  cp "$src" "$dst"
+  ok "created $dst"
+}
+
+# Kit-owned machinery (skills, agents, hooks, scripts, doc/example templates):
+# files the kit fully controls and reconciles toward the shipped version on
+# upgrade WITHOUT clobbering local edits. absent -> create; byte-identical to the
+# shipped bytes -> silent no-op; diverged -> leave the live file, write the
+# incoming version to <file>.kitnew, and note it (the pacman .pacnew / dpkg
+# .dpkg-dist convention). --overwrite-machinery takes the kit version outright.
+DIVERGED=()
+KITNEW_SENTINEL="working-memory-kit: a newer version of this file shipped"
+
+# Render src as this install would write it: apply the same WM-dir token
+# substitution the installer does, so the divergence compare doesn't false-
+# positive under a custom dir. Echoes a path to the bytes to use (src itself
+# when nothing needs substituting; a temp file otherwise, which the caller rms).
+render_machinery() {
+  local src="$1"
+  if [ "$WM_DIR" = "$WM_DIR_DEFAULT" ]; then
+    printf '%s' "$src"
   else
-    mkdir -p "$(dirname "$dst")"
-    cp "$src" "$dst"
-    ok "created $dst"
+    local tmp; tmp="$(mktemp)"
+    sed "s|_working-memory|$WM_DIR|g" "$src" > "$tmp"
+    printf '%s' "$tmp"
   fi
+}
+
+install_machinery() {
+  local src="$1" dst="$2" rendered
+  rendered="$(render_machinery "$src")"
+  if [ ! -e "$dst" ]; then
+    mkdir -p "$(dirname "$dst")"
+    cp "$rendered" "$dst"
+    ok "created $dst"
+  elif cmp -s "$rendered" "$dst"; then
+    :   # identical to the shipped version: nothing to reconcile
+  elif [ "$OVERWRITE_MACHINERY" -eq 1 ]; then
+    cp "$rendered" "$dst"
+    ok "refreshed $dst (took the kit version)"
+  else
+    cp "$rendered" "$dst.kitnew"
+    local rel="${dst#"$TARGET_DIR"/}"
+    DIVERGED+=("$rel")
+    add_kitnew_pointer "$dst"
+    warn "diverged: kept your $rel; kit version written to $rel.kitnew"
+  fi
+  [ "$rendered" != "$src" ] && rm -f "$rendered"
+  return 0
+}
+
+# One idempotent pointer telling a reader a .kitnew sits alongside a diverged
+# file. Comment-friendly types only; JSON can't carry a comment (the summary
+# covers it). Inserted after a #! shebang or a --- frontmatter block so line 1
+# stays valid, the same reason we never write conflict markers. The sentinel
+# keeps repeated runs from stacking duplicates, which byte-stability relies on.
+add_kitnew_pointer() {
+  local dst="$1" base; base="$(basename "$dst")"
+  grep -qF "$KITNEW_SENTINEL" "$dst" 2>/dev/null && return 0
+  local open="" close=""
+  case "$dst" in
+    *.md|*.md.example)                          open="<!-- "; close=" -->" ;;
+    *.sh|*.ps1|*.working-memoryrc*)             open="# " ;;
+    *)                                          return 0 ;;
+  esac
+  local note="${open}${KITNEW_SENTINEL}. See ${base}.kitnew, merge what you want, then delete both it and this note.${close}"
+  local after=0 first
+  first="$(head -n1 "$dst" 2>/dev/null || true)"
+  case "$first" in
+    '#!'*) after=1 ;;
+    '---') after="$(awk 'NR>1 && $0=="---"{print NR; exit}' "$dst")"; [ -z "$after" ] && after=0 ;;
+  esac
+  local tmp; tmp="$(mktemp)"
+  if [ "$after" -gt 0 ]; then
+    { head -n "$after" "$dst"; printf '%s\n' "$note"; tail -n +"$((after + 1))" "$dst"; } > "$tmp"
+  else
+    { printf '%s\n' "$note"; cat "$dst"; } > "$tmp"
+  fi
+  cat "$tmp" > "$dst"
+  rm -f "$tmp"
 }
 
 # w-m-k owns one fenced section in each agent file. A (re)install only reads and
@@ -272,9 +399,14 @@ set_rc_key() {
 # --coexist-with <path> registers external spec tooling the registry doesn't know;
 # --coexist-principles <file> pairs its principles file; --no-coexist opts out.
 # These also flow through curl|bash via `bash -s -- --coexist-with <path>`.
+# --overwrite-machinery takes the shipped version of every kit-owned file
+# outright, skipping the .kitnew sidecars. It's the flag-only escape hatch for
+# the Upgrade flow (there's deliberately no menu item and no --force alias, which
+# would read as "skip confirmations"). Content files are never touched by it.
 COEXIST_WITH=""
 COEXIST_PRINCIPLES=""
 NO_COEXIST=0
+OVERWRITE_MACHINERY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --coexist-with=*)       COEXIST_WITH="${1#*=}"; shift ;;
@@ -282,6 +414,7 @@ while [ $# -gt 0 ]; do
     --coexist-principles=*) COEXIST_PRINCIPLES="${1#*=}"; shift ;;
     --coexist-principles)   shift; if [ $# -gt 0 ]; then COEXIST_PRINCIPLES="$1"; shift; fi ;;
     --no-coexist)           NO_COEXIST=1; shift ;;
+    --overwrite-machinery)  OVERWRITE_MACHINERY=1; shift ;;
     *)                      warn "ignoring unknown option: $1"; shift ;;
   esac
 done
@@ -330,7 +463,7 @@ KIT_ROOT="$(dirname "$TEMPLATE")"
 # ---------- intro ----------
 
 say ""
-say "$(c_blue "working-memory-kit installer")"
+draw_box primary "working-memory-kit installer"
 say "Target: $TARGET_DIR"
 say ""
 
@@ -463,22 +596,48 @@ EXISTING=()
 [ -f "$TARGET_DIR/AGENTS.md" ] && EXISTING+=("AGENTS.md")
 [ -f "$TARGET_DIR/CLAUDE.md" ] && EXISTING+=("CLAUDE.md")
 
+# MODE drives file handling downstream. A fresh repo installs; an existing kit
+# is an upgrade (reconcile machinery, add new content, refresh fenced sections,
+# never touch edited content). No tty and no flag both resolve to the safe
+# upgrade default; an interactive run gets the explicit Upgrade/Cancel choice.
+MODE="install"
 if [ "${#EXISTING[@]}" -gt 0 ]; then
-  warn "found existing config: ${EXISTING[*]}"
-  warn "files will be merged where possible. You'll be prompted before overwrites."
-  if ! confirm "Continue?" "y"; then
-    say "aborted."
+  MODE="upgrade"
+  if [ -n "$TTY_FD" ] && [ "$OVERWRITE_MACHINERY" -ne 1 ]; then
+    say ""
+    warn "working-memory-kit is already installed here (${EXISTING[*]})."
+    draw_box primary \
+      "Upgrade   add anything new, refresh managed sections, keep everything you edited" \
+      "Cancel    exit without changes"
+    say "$(paint muted "  Machinery the kit owns (skills, agents, hooks, scripts) reconciles toward the")"
+    say "$(paint muted "  latest; if you changed one, the kit version lands beside it as .kitnew instead")"
+    say "$(paint muted "  of overwriting. Your working-memory notes are never touched.")"
+    printf "%s " "Choose [U/c]:"
+    prompt_read menu_reply
+    # shellcheck disable=SC2154  # set indirectly by prompt_read
+    case "${menu_reply:-u}" in
+      c|C|cancel|CANCEL|2) MODE="cancel" ;;
+      *)                   MODE="upgrade" ;;   # default to the safe choice
+    esac
+  fi
+  if [ "$MODE" = "cancel" ]; then
+    say "cancelled. Nothing changed."
     exit 0
   fi
 fi
 
 say ""
-info "scaffolding..."
+if [ "$MODE" = "upgrade" ]; then info "upgrading..."; else info "scaffolding..."; fi
 
 # ---------- working-memory ----------
 
 mkdir -p "$TARGET_DIR/$WM_DIR"
-for f in README.md activeContext.example.md projectOverview.md decisionLog.md dataContracts.md conventions.md openQuestions.md antipatterns.md; do
+# The kit-authored README and the example are machinery (kit-owned, reconciled).
+# The six memory files are the user's content: seeded once, never overwritten.
+for f in README.md activeContext.example.md; do
+  install_machinery "$TEMPLATE/_working-memory/$f" "$TARGET_DIR/$WM_DIR/$f"
+done
+for f in projectOverview.md decisionLog.md dataContracts.md conventions.md openQuestions.md antipatterns.md; do
   copy_if_absent "$TEMPLATE/_working-memory/$f" "$TARGET_DIR/$WM_DIR/$f"
 done
 
@@ -544,7 +703,7 @@ fi
 # We ship the example, not the rc itself. Defaults are baked into the hook
 # scripts; the rc is opt-in for teams that want to override line limits or
 # nudge thresholds. Devs cp it to .working-memoryrc when they need it.
-copy_if_absent \
+install_machinery \
   "$TEMPLATE/.working-memoryrc.example" \
   "$TARGET_DIR/.working-memoryrc.example"
 
@@ -591,10 +750,10 @@ fi
 # ---------- Claude Code config ----------
 
 mkdir -p "$TARGET_DIR/.claude/agents" "$TARGET_DIR/.claude/skills/update-working-memory"
-copy_if_absent \
+install_machinery \
   "$TEMPLATE/.claude/agents/working-memory-synchronizer.md" \
   "$TARGET_DIR/.claude/agents/working-memory-synchronizer.md"
-copy_if_absent \
+install_machinery \
   "$TEMPLATE/.claude/skills/update-working-memory/SKILL.md" \
   "$TARGET_DIR/.claude/skills/update-working-memory/SKILL.md"
 
@@ -602,7 +761,7 @@ copy_if_absent \
 # root (not template/) since kit contributors use the same files. Optional —
 # installs cleanly if the kit version doesn't ship them yet.
 if [ -f "$KIT_ROOT/.claude/agents/hydrator.md" ]; then
-  copy_if_absent \
+  install_machinery \
     "$KIT_ROOT/.claude/agents/hydrator.md" \
     "$TARGET_DIR/.claude/agents/hydrator.md"
 fi
@@ -611,7 +770,7 @@ if [ -d "$KIT_ROOT/.claude/skills" ]; then
     [ -d "$skill_dir" ] || continue
     skill_name="$(basename "$skill_dir")"
     if [ -f "$skill_dir/SKILL.md" ]; then
-      copy_if_absent \
+      install_machinery \
         "$skill_dir/SKILL.md" \
         "$TARGET_DIR/.claude/skills/$skill_name/SKILL.md"
     fi
@@ -647,13 +806,17 @@ mkdir -p \
   "$TARGET_DIR/.github/hooks" \
   "$TARGET_DIR/.github/instructions"
 
-copy_if_absent \
+install_machinery \
   "$TEMPLATE/.github/hooks/working-memory-hooks.json" \
   "$TARGET_DIR/.github/hooks/working-memory-hooks.json"
 
-copy_if_absent \
-  "$TEMPLATE/.github/instructions/data-layer.instructions.md" \
-  "$TARGET_DIR/.github/instructions/data-layer.instructions.md"
+# Inert example of a path-scoped Copilot instruction wired to the working-memory
+# files. The .example suffix keeps it out of VS Code's active *.instructions.md
+# glob; a consumer copies it to working-memory.instructions.md and edits applyTo
+# to switch it on.
+install_machinery \
+  "$TEMPLATE/.github/instructions/working-memory.instructions.md.example" \
+  "$TARGET_DIR/.github/instructions/working-memory.instructions.md.example"
 
 COPILOT_BLOCK=$(mktemp)
 extract_block "$TEMPLATE/.github/copilot-instructions.md" > "$COPILOT_BLOCK"
@@ -671,7 +834,7 @@ mkdir -p "$TARGET_DIR/scripts"
 for f in working-memory-session-start.sh working-memory-session-start.ps1 \
          working-memory-session-end.sh working-memory-session-end.ps1 \
          update-working-memory.sh update-working-memory.ps1; do
-  copy_if_absent "$TEMPLATE/scripts/$f" "$TARGET_DIR/scripts/$f"
+  install_machinery "$TEMPLATE/scripts/$f" "$TARGET_DIR/scripts/$f"
 done
 chmod +x "$TARGET_DIR/scripts/"*.sh 2>/dev/null || true
 ok "marked scripts/*.sh executable"
@@ -694,21 +857,15 @@ fi
 
 # ---------- substitute WM_DIR token in copied files if user overrode default ----------
 
+# Machinery files already rendered the token at write time (install_machinery),
+# so only the fenced files remain: they're spliced in place from the template's
+# _working-memory literal and can't be pre-rendered.
 if [ "$WM_DIR" != "$WM_DIR_DEFAULT" ]; then
-  info "substituting _working-memory -> $WM_DIR in copied template files"
+  info "substituting _working-memory -> $WM_DIR in the fenced sections"
   for f in \
     "AGENTS.md" \
     "CLAUDE.md" \
-    ".claude/agents/working-memory-synchronizer.md" \
-    ".claude/skills/update-working-memory/SKILL.md" \
-    ".github/copilot-instructions.md" \
-    ".github/instructions/data-layer.instructions.md" \
-    "scripts/working-memory-session-start.sh" \
-    "scripts/working-memory-session-end.sh" \
-    "scripts/update-working-memory.sh" \
-    "scripts/working-memory-session-start.ps1" \
-    "scripts/working-memory-session-end.ps1" \
-    "scripts/update-working-memory.ps1"
+    ".github/copilot-instructions.md"
   do
     full="$TARGET_DIR/$f"
     if [ -f "$full" ]; then
@@ -753,8 +910,19 @@ done
 # Coexistence summary: who owns what, plus any memory-tool overlap warning.
 print_coexistence_summary "$NEIGHBORS"
 
+# Divergence summary: kit files you'd edited, left untouched, with the shipped
+# version parked alongside as .kitnew. JSON has no sidecar pointer, so this is
+# the only notice it gets.
+if [ "${#DIVERGED[@]}" -gt 0 ]; then
+  say ""
+  warn "${#DIVERGED[@]} kit file(s) diverged from the shipped version and were left as you have them:"
+  for f in "${DIVERGED[@]}"; do say "    - $f  (kit version: $f.kitnew)"; done
+  say "    Diff each against its .kitnew, merge what you want, then delete the .kitnew."
+  say "    Or re-run with --overwrite-machinery to take every kit version at once."
+fi
+
 say ""
-say "$(c_green "done.")"
+say "$(paint success "done.")"
 say ""
 say "next steps:"
 say "  1. Populate working memory (recommended for existing codebases):"
