@@ -92,5 +92,5 @@ if ($reason) {
 }
 
 if ($reason) {
-    Write-Output "{`"systemMessage`":`"You changed $reason this session.$extra Consider running /update-working-memory or @working-memory-synchronizer to keep the working memory current.`"}"
+    Write-Output "{`"systemMessage`":`"You changed $reason this session.$extra Use the update-working-memory skill or the supplied update script to keep working memory current.`"}"
 }
