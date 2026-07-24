@@ -687,6 +687,27 @@ if (Test-Path $hydrateSkillsDir) {
     }
 }
 
+# ---------- Codex config ----------
+
+# Codex discovers repository skills from .agents/skills. Install from the
+# existing .claude sources so the shared workflow keeps one source of truth.
+Install-Machinery `
+    (Join-Path $Template '.claude/skills/update-working-memory/SKILL.md') `
+    (Join-Path $TargetDir '.agents/skills/update-working-memory/SKILL.md')
+if (Test-Path $hydrateSkillsDir) {
+    Get-ChildItem -Path $hydrateSkillsDir -Directory -Filter 'hydrate-*' | ForEach-Object {
+        $skillFile = Join-Path $_.FullName 'SKILL.md'
+        if (Test-Path $skillFile) {
+            $dst = Join-Path $TargetDir ".agents/skills/$($_.Name)/SKILL.md"
+            Install-Machinery $skillFile $dst
+        }
+    }
+}
+Install-Machinery (Join-Path $Template '.codex/agents/hydrator.toml') `
+                  (Join-Path $TargetDir '.codex/agents/hydrator.toml')
+Install-Machinery (Join-Path $Template '.codex/hooks.json') `
+                  (Join-Path $TargetDir '.codex/hooks.json')
+
 $claudeBody = @'
 ## Working Memory
 
@@ -784,7 +805,15 @@ $canonical = @(
     '.claude/skills/hydrate-extract/SKILL.md',
     '.claude/skills/hydrate-draft/SKILL.md',
     '.claude/skills/hydrate-reconcile/SKILL.md',
-    '.claude/skills/hydrate-propose/SKILL.md'
+    '.claude/skills/hydrate-propose/SKILL.md',
+    '.agents/skills/update-working-memory/SKILL.md',
+    '.agents/skills/hydrate-discover/SKILL.md',
+    '.agents/skills/hydrate-extract/SKILL.md',
+    '.agents/skills/hydrate-draft/SKILL.md',
+    '.agents/skills/hydrate-reconcile/SKILL.md',
+    '.agents/skills/hydrate-propose/SKILL.md',
+    '.codex/agents/hydrator.toml',
+    '.codex/hooks.json'
 )
 $canonicalOk = $true
 foreach ($f in $canonical) {
@@ -817,16 +846,16 @@ Write-Host 'done.' -ForegroundColor Green
 Write-Host ''
 Write-Host 'next steps:'
 Write-Host '  1. Populate working memory (recommended for existing codebases):'
-Write-Host '       In Claude Code or VS Code Copilot, invoke the hydrator agent'
-Write-Host '       (or run /hydrate-discover to walk the five phases one at a time).'
+Write-Host '       Use the hydrator agent in Claude Code, Copilot, or Codex.'
+Write-Host '       Or run the hydrate-discover skill to walk the five phases one at a time.'
 Write-Host '       This scans your codebase, git history, README, and ADRs to fill'
 Write-Host '       projectOverview / decisionLog / dataContracts / conventions.'
 Write-Host '       For a brand-new project, skip this step and edit the files by hand.'
 Write-Host "  2. Edit $WmDir/activeContext.md to reflect what you're working on."
 Write-Host '  3. Teammates: after cloning, run:'
 Write-Host "       Copy-Item $WmDir/activeContext.example.md $WmDir/activeContext.md"
-Write-Host '  4. Ongoing sync: invoke the working-memory-synchronizer agent, or'
-Write-Host '     run: ./scripts/update-working-memory.ps1'
+Write-Host '  4. Ongoing sync: use the update-working-memory skill, or run:'
+Write-Host '     ./scripts/update-working-memory.ps1'
 Write-Host '  5. To tune line limits or nudge thresholds:'
 Write-Host '       Copy-Item .working-memoryrc.example .working-memoryrc   # then edit'
 
