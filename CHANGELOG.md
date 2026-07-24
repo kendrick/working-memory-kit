@@ -2,6 +2,18 @@
 
 Notable changes to working-memory-kit, grouped by type and generated from the Conventional Commit history with [git-cliff](https://git-cliff.org). The kit installs from `main`; tagged releases appear as dated sections, and work since the last tag sits under Unreleased.
 
+## 0.3.0 (2026-07-24)
+
+### Features
+- *(codex)* Add local working-memory integration
+
+### Documentation
+- Add Codex support to README
+- Document local Codex workflows
+
+### Testing
+- *(codex)* Cover installed Codex machinery
+
 ## 0.2.0 (2026-07-08)
 
 ### Features
