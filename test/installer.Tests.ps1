@@ -14,6 +14,51 @@ Describe 'installer' {
         Get-Content .gitignore -Raw | Should -Match 'activeContext.md'
     }
 
+    It 'fresh install exposes Codex skills, hydrator, and lifecycle hooks' {
+        Invoke-Installer | Out-Null
+        @(
+            '.agents/skills/update-working-memory/SKILL.md',
+            '.agents/skills/hydrate-discover/SKILL.md',
+            '.agents/skills/hydrate-extract/SKILL.md',
+            '.agents/skills/hydrate-draft/SKILL.md',
+            '.agents/skills/hydrate-reconcile/SKILL.md',
+            '.agents/skills/hydrate-propose/SKILL.md',
+            '.codex/agents/hydrator.toml',
+            '.codex/hooks.json'
+        ) | Should -Exist
+
+        $skillSources = @{
+            'update-working-memory' = Join-Path $KitRoot 'template/.claude/skills/update-working-memory/SKILL.md'
+            'hydrate-discover'      = Join-Path $KitRoot '.claude/skills/hydrate-discover/SKILL.md'
+            'hydrate-extract'       = Join-Path $KitRoot '.claude/skills/hydrate-extract/SKILL.md'
+            'hydrate-draft'         = Join-Path $KitRoot '.claude/skills/hydrate-draft/SKILL.md'
+            'hydrate-reconcile'     = Join-Path $KitRoot '.claude/skills/hydrate-reconcile/SKILL.md'
+            'hydrate-propose'       = Join-Path $KitRoot '.claude/skills/hydrate-propose/SKILL.md'
+        }
+        foreach ($skill in $skillSources.GetEnumerator()) {
+            (Get-FileHash (Join-Path '.agents/skills' "$($skill.Key)/SKILL.md")).Hash | Should -Be (Get-FileHash $skill.Value).Hash
+        }
+
+        $hooks = Get-Content .codex/hooks.json -Raw | ConvertFrom-Json
+        $hooks.hooks.SessionStart[0].hooks[0].command | Should -Not -BeNullOrEmpty
+        $hooks.hooks.SessionStart[0].hooks[0].commandWindows | Should -Not -BeNullOrEmpty
+        $hooks.hooks.SessionEnd[0].hooks[0].command | Should -Not -BeNullOrEmpty
+        $hooks.hooks.SessionEnd[0].hooks[0].commandWindows | Should -Not -BeNullOrEmpty
+        $hooks.hooks.SessionStart[0].hooks[0].command | Should -Match 'working-memory-session-start\.sh'
+        $hooks.hooks.SessionStart[0].hooks[0].commandWindows | Should -Match 'working-memory-session-start\.ps1'
+        $hooks.hooks.SessionEnd[0].hooks[0].command | Should -Match 'working-memory-session-end\.sh'
+        $hooks.hooks.SessionEnd[0].hooks[0].commandWindows | Should -Match 'working-memory-session-end\.ps1'
+        $hooks.hooks.SessionEnd[0].hooks[0].timeout | Should -Be 3
+    }
+
+    It 'Codex hook machinery writes a sidecar instead of replacing an edit' {
+        Invoke-Installer | Out-Null
+        Add-Content .codex/hooks.json ''
+        Invoke-Installer | Out-Null
+        '.codex/hooks.json.kitnew' | Should -Exist
+        (Get-Content .codex/hooks.json -Raw).Length | Should -BeGreaterThan (Get-Content .codex/hooks.json.kitnew -Raw).Length
+    }
+
     It 'install is idempotent' {
         Set-Content package.json '{ "dependencies": { "react": "^18.0.0" } }'
         Invoke-Installer | Out-Null
