@@ -777,6 +777,31 @@ if [ -d "$KIT_ROOT/.claude/skills" ]; then
   done
 fi
 
+# ---------- Codex config ----------
+
+# Codex discovers repository skills from .agents/skills. Install from the
+# existing .claude sources so the shared workflow keeps one source of truth.
+install_machinery \
+  "$TEMPLATE/.claude/skills/update-working-memory/SKILL.md" \
+  "$TARGET_DIR/.agents/skills/update-working-memory/SKILL.md"
+if [ -d "$KIT_ROOT/.claude/skills" ]; then
+  for skill_dir in "$KIT_ROOT/.claude/skills/hydrate-"*; do
+    [ -d "$skill_dir" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    if [ -f "$skill_dir/SKILL.md" ]; then
+      install_machinery \
+        "$skill_dir/SKILL.md" \
+        "$TARGET_DIR/.agents/skills/$skill_name/SKILL.md"
+    fi
+  done
+fi
+install_machinery \
+  "$TEMPLATE/.codex/agents/hydrator.toml" \
+  "$TARGET_DIR/.codex/agents/hydrator.toml"
+install_machinery \
+  "$TEMPLATE/.codex/hooks.json" \
+  "$TARGET_DIR/.codex/hooks.json"
+
 # Build the fenced CLAUDE block: markers from the variable, body kept literal
 # (quoted heredoc) so its backticks and slashes aren't interpreted by the shell.
 CLAUDE_BLOCK=$(mktemp)
@@ -895,7 +920,15 @@ for f in \
   ".claude/skills/hydrate-extract/SKILL.md" \
   ".claude/skills/hydrate-draft/SKILL.md" \
   ".claude/skills/hydrate-reconcile/SKILL.md" \
-  ".claude/skills/hydrate-propose/SKILL.md"
+  ".claude/skills/hydrate-propose/SKILL.md" \
+  ".agents/skills/update-working-memory/SKILL.md" \
+  ".agents/skills/hydrate-discover/SKILL.md" \
+  ".agents/skills/hydrate-extract/SKILL.md" \
+  ".agents/skills/hydrate-draft/SKILL.md" \
+  ".agents/skills/hydrate-reconcile/SKILL.md" \
+  ".agents/skills/hydrate-propose/SKILL.md" \
+  ".codex/agents/hydrator.toml" \
+  ".codex/hooks.json"
 do
   if [ -f "$TARGET_DIR/$f" ]; then
     ok "present: $f"
@@ -926,16 +959,16 @@ say "$(paint success "done.")"
 say ""
 say "next steps:"
 say "  1. Populate working memory (recommended for existing codebases):"
-say "       In Claude Code or VS Code Copilot, invoke the hydrator agent"
-say "       (or run /hydrate-discover to walk the five phases one at a time)."
+say "       Use the hydrator agent in Claude Code, Copilot, or Codex."
+say "       Or run the hydrate-discover skill to walk the five phases one at a time."
 say "       This scans your codebase, git history, README, and ADRs to fill"
 say "       projectOverview / decisionLog / dataContracts / conventions."
 say "       For a brand-new project, skip this step and edit the files by hand."
 say "  2. Edit $WM_DIR/activeContext.md to reflect what you're working on."
 say "  3. Teammates: after cloning, run:"
 say "       cp $WM_DIR/activeContext.example.md $WM_DIR/activeContext.md"
-say "  4. Ongoing sync: invoke the working-memory-synchronizer agent, or"
-say "     run: ./scripts/update-working-memory.sh"
+say "  4. Ongoing sync: use the update-working-memory skill, or run:"
+say "     ./scripts/update-working-memory.sh"
 say "  5. To tune line limits or nudge thresholds:"
 say "       cp .working-memoryrc.example .working-memoryrc   # then edit"
 

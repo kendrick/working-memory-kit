@@ -1,8 +1,29 @@
 # working-memory-kit
 
-A two-tier working memory that gives AI coding agents persistent project context across sessions, without forcing them to re-learn everything on every turn.
+A two-tier project memory for coding agents that persists across sessions.
 
-Works with Claude Code and GitHub Copilot. Greenfield or brownfield. Installs with one command on both macOS and Windows.
+Works with Claude Code, GitHub Copilot, and trusted local Codex CLI and IDE sessions. Greenfield or brownfield. Installs with one command on both macOS and Windows.
+
+## Contents
+
+- [working-memory-kit](#working-memory-kit)
+  - [Contents](#contents)
+  - [The problem](#the-problem)
+  - [The shape](#the-shape)
+  - [Install](#install)
+  - [Choose Your Path](#choose-your-path)
+  - [How it works](#how-it-works)
+  - [Hydrating An Existing Project](#hydrating-an-existing-project)
+  - [Customizing](#customizing)
+  - [Why these defaults](#why-these-defaults)
+  - [Compatibility](#compatibility)
+    - [Invoking Workflows](#invoking-workflows)
+  - [Coexisting with spec-driven tooling](#coexisting-with-spec-driven-tooling)
+  - [Updating the kit](#updating-the-kit)
+  - [Repository layout](#repository-layout)
+  - [Developing The Kit](#developing-the-kit)
+  - [Contributing](#contributing)
+  - [License](#license)
 
 ## The problem
 
@@ -21,10 +42,11 @@ _working-memory/
 ├── decisionLog.md
 ├── dataContracts.md
 ├── conventions.md
-└── openQuestions.md
+├── openQuestions.md
+└── antipatterns.md
 ```
 
-`activeContext.md` is the sticky note on the monitor: what you're working on right now, the last decision, known risks. The other five files are the filing cabinet, opened only when the agent needs them.
+`activeContext.md` is the sticky note on the monitor: what you're working on right now, the last decision, known risks. The other six files are the filing cabinet, opened only when the agent needs them.
 
 ## Install
 
@@ -40,11 +62,13 @@ Replace `kendrick` with the GitHub org or wherever this repo is hosted.
 
 The installer is the canonical setup. If your environment forbids piping `curl` to a shell, or you're offline, clone the repo and run `./init.sh` (or `./init.ps1`) instead. For an agent that can only edit files and can't run a script, copy `template/` into place and wrap the `## Working Memory` section of `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md` in `<!-- working-memory:start -->` / `<!-- working-memory:end -->` markers, which is what the installer does.
 
-- `_working-memory/` with the six template files plus a short `README.md` for new contributors
+- `_working-memory/` with seven template files plus a short `README.md` for new contributors
 - `AGENTS.md` (creates one, or appends a section to your existing file). This is the canonical home for the on-demand table and update rules.
 - `.claude/agents/` and `.claude/skills/` (read by both Claude Code and VS Code Copilot):
   - `working-memory-synchronizer` agent and `update-working-memory` skill — the **ongoing maintenance** surface.
   - `hydrator` agent and `hydrate-{discover,extract,draft,reconcile,propose}` skills — the **one-time onboarding** surface for brownfield installs.
+- `.agents/skills/` (read by Codex): the same `update-working-memory` and `hydrate-*` skills, installed from the canonical `.claude` sources.
+- `.codex/agents/hydrator.toml` and `.codex/hooks.json` for Codex’s composite hydration workflow and lifecycle hooks.
 - `.github/hooks/working-memory-hooks.json` and `.github/instructions/working-memory.instructions.md.example` if your project uses GitHub Copilot (these formats are Copilot-specific; the `.example` is an inert sample you copy to `working-memory.instructions.md` to switch on)
 - `.github/copilot-instructions.md` (creates or prepends a thin pointer to `AGENTS.md`)
 - `CLAUDE.md` (prepends a thin pointer to `AGENTS.md`)
@@ -53,11 +77,19 @@ The installer is the canonical setup. If your environment forbids piping `curl` 
 
 It also adds `_working-memory/activeContext.md` to `.gitignore`. `activeContext` is meant to be per-developer, not per-team.
 
+## Choose Your Path
+
+| Situation             | Start Here                                                                                                                                     |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| New project           | Install the kit, then fill in the working-memory files as the project takes shape.                                                             |
+| Existing project      | Install the kit, then run the hydration workflow to prepare reviewable working-memory drafts from the codebase, git history, and project docs. |
+| Existing installation | Re-run the installer to add new machinery and refresh the managed instruction blocks without replacing your working-memory notes.              |
+
 ## How it works
 
 Every session starts with a read of `activeContext.md`. The session-start hook warns you if it's grown past the line limit.
 
-The other five files load on demand. `AGENTS.md` or `.github/copilot-instructions.md` (depending on your project tooling) tell the agent which file to open for which kind of work:
+The other six files load on demand. `AGENTS.md` or `.github/copilot-instructions.md` (depending on your project tooling) tell the agent which file to open for which kind of work:
 
 - Schemas via `dataContracts.md`
 - Prior decisions via `decisionLog.md`
@@ -65,16 +97,26 @@ The other five files load on demand. `AGENTS.md` or `.github/copilot-instruction
 
 After meaningful work, you (or the synchronizer agent) move completed items out of `activeContext.md` and into `decisionLog.md`. The session-end hook nudges you when the diff suggests an update is overdue, by default when you've changed 5+ files **or** 200+ lines.
 
-Manual sync: `/update-working-memory` in either Claude Code or GitHub Copilot Chat (both invoke the shared skill at `.claude/skills/update-working-memory/SKILL.md`), or `@working-memory-synchronizer` to invoke the custom agent. From any terminal, `./scripts/update-working-memory.sh` prints the active config and current state.
+Manual sync: use `/update-working-memory` in Claude Code or GitHub Copilot Chat, `$update-working-memory` in Codex, or the `working-memory-synchronizer` agent where your tool supports it. From any terminal, `./scripts/update-working-memory.sh` prints the active config and current state.
 
-## Populating working memory after install
+```bash
+./scripts/update-working-memory.sh
+```
+
+The script starts with:
+
+```
+=== Working Memory Status ===
+```
+
+## Hydrating An Existing Project
 
 The scaffold pre-populates stack info and a directory map. For an existing codebase, the next step is the **hydration pipeline**, which scans your code, git history, README, and any ADRs to draft proposed content for `projectOverview.md`, `decisionLog.md`, `dataContracts.md`, and `conventions.md` — staged as a commit (or PR for multi-developer projects) for human review.
 
 The installer ships the pipeline into your repo. Two ways to run it:
 
-- **Composite agent.** Ask your AI agent to "run the hydrator" (Claude Code) or "use the agent at `.claude/agents/hydrator.md`" (Copilot Chat). It orchestrates the five phases end-to-end.
-- **Phase by phase.** Invoke the slash skills one at a time: `/hydrate-discover`, `/hydrate-extract`, `/hydrate-draft`, `/hydrate-reconcile`, `/hydrate-propose`. Useful when you want to review each phase's output before advancing.
+- **Composite agent.** Ask Claude Code to "run the hydrator," ask Copilot Chat to use `.claude/agents/hydrator.md`, or ask Codex to use the project `hydrator` agent. It orchestrates the five phases end-to-end.
+- **Phase by phase.** Invoke `/hydrate-discover`, `/hydrate-extract`, `/hydrate-draft`, `/hydrate-reconcile`, and `/hydrate-propose` in Claude Code or Copilot. In Codex, use the same names with `$` instead of `/`. This route is useful when you want to review each phase before advancing.
 
 Brand-new projects can skip hydration and edit the template files by hand. The pipeline expects a codebase to scan.
 
@@ -107,20 +149,23 @@ Five files **or** two hundred lines for the nudge because the two signals catch 
 
 ## Compatibility
 
-The kit puts shared artifacts at the one canonical location both tools natively read. Claude Code and VS Code Copilot both read `.claude/agents/working-memory-synchronizer.md` and `.claude/skills/update-working-memory/SKILL.md`. Copilot-only formats stay under `.github/`: hooks at `.github/hooks/working-memory-hooks.json` (VS Code schema), and path-scoped instructions at `.github/instructions/*.instructions.md`. Any agent that respects `AGENTS.md` will pick up the on-demand table.
+`AGENTS.md` is the shared instruction surface. The kit puts each tool’s optional workflow files where that tool reads them: `.claude/` for Claude Code and VS Code Copilot, `.agents/skills/` for Codex, and `.github/` for Copilot-only instructions and hooks.
 
-The hooks JSON uses VS Code's schema (`SessionStart` / `Stop`, `command` with a `windows` override, `timeout`) since `.github/hooks/*.json` is a VS Code workspace path. GitHub Copilot Cloud Agent uses a different hooks schema; if you need both, you'll need a second hook file.
+Codex reads `.codex/agents/hydrator.toml` and `.codex/hooks.json` only in trusted projects. Codex asks users to review new or changed hooks before it runs them; use `/hooks` to inspect and trust the installed hooks. Codex Cloud is not supported yet because hosted runs cannot carry a developer’s gitignored `activeContext.md` between sessions.
 
-### Invoking agents
+The Copilot hooks JSON uses VS Code's schema (`SessionStart` / `Stop`, `command` with a `windows` override, `timeout`) because `.github/hooks/*.json` is a VS Code workspace path. GitHub Copilot Cloud Agent uses a different hooks schema; if you need both, add a second hook file.
 
-Both tools _read_ the agent files at `.claude/agents/`, but the _invocation patterns_ differ. Knowing this saves a "why doesn't `@hydrator` autocomplete?" moment:
+### Invoking Workflows
 
-| Tool                 | How to invoke a custom agent                                                                                                                                                                                                                            |
+Claude Code and Copilot read the agent files at `.claude/agents/`, but their invocation patterns differ:
+
+| Tool                 | How to invoke the workflow                                                                                                                                                                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Claude Code          | Ask in chat ("run the hydrator", "use the working-memory-synchronizer"), use the `/agents` command if your build surfaces one, or invoke via the Agent tool in scripts. `@` is for file references, not agent mentions.                                 |
 | VS Code Copilot Chat | Reference the agent file by path ("use the agent at `.claude/agents/hydrator.md`") and Copilot will read and follow it. `@` autocompletes Copilot-registered chat participants only (`@workspace`, `@terminal`, etc.) — not files in `.claude/agents/`. |
+| Codex CLI / IDE      | Use `$update-working-memory` or a `$hydrate-*` skill. For the full pipeline, ask Codex to use the project `hydrator` agent.                                                                                                                             |
 
-Slash skills (`/update-working-memory`, `/hydrate-discover`) are the most portable invocation surface — both tools surface them via the slash menu once the SKILL.md is in place.
+Slash skills are the most portable invocation surface for Claude Code and Copilot. Codex uses `$` for skills and discovers the installed workflows from `.agents/skills/`.
 
 ## Coexisting with spec-driven tooling
 
@@ -161,12 +206,27 @@ working-memory-kit/
 │   ├── _working-memory/
 │   ├── AGENTS.md
 │   ├── .claude/{agents,skills}/
+│   ├── .codex/{agents,hooks.json}
 │   ├── .github/{copilot-instructions.md,hooks,instructions}/
 │   ├── scripts/
 │   └── .working-memoryrc.example
 └── README.md
 ```
 
+## Developing The Kit
+
+Run the Bash suite with Node installed:
+
+```bash
+npx --yes bats@1.13.0 test/
+```
+
+GitHub Actions also runs ShellCheck on the Bash installer and scripts, plus the Pester suite on Windows and macOS.
+
+## Contributing
+
+Issues and pull requests are welcome. Keep changes focused, add or update the matching Bats and Pester coverage, and run the relevant checks before opening a pull request.
+
 ## License
 
-MIT.
+This project is licensed under the [MIT License](LICENSE).
