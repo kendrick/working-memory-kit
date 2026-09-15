@@ -1,0 +1,15 @@
+# The kit ships no dependency manifest on purpose, so Dependabot has exactly one
+# surface to watch: the action versions pinned in the workflows. Without this
+# file, a pinned action can sit on a yanked or vulnerable tag indefinitely,
+# because security updates alone never look at GitHub Actions.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      # CHANGELOG.md is generated from Conventional Commits by git-cliff, and
+      # cliff.toml routes this prefix to the CI & Build section. An unprefixed
+      # bump would land in the changelog uncategorized.
+      prefix: "ci"
