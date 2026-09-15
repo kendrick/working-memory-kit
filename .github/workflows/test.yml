@@ -14,7 +14,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # npx runs bats from npm with no package.json and no per-OS install step;
       # every GitHub runner already ships Node. The version is pinned for
       # reproducibility. This keeps the install path language-agnostic (the kit
@@ -26,7 +26,7 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run shellcheck
         run: shellcheck init.sh template/scripts/*.sh
 
@@ -43,7 +43,7 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # windows-latest ships the legacy Pester 3.4 in $PSHOME; force-install v5
       # to CurrentUser and import it explicitly so Invoke-Pester resolves to it.
       # -SkipPublisherCheck is required because 3.4 and 5.x have different signers.
