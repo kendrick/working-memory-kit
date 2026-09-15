@@ -16,7 +16,7 @@ Most artifacts live at one canonical location both tools read natively:
 
 ## Template surface vs. kit surface
 
-Files under [`template/`](template/) are **not** part of this repo's own agent surface. The installer copies them into consumer projects. The conventions inside `template/` mirror the kit-level ones (`.claude/` is canonical for cross-tool work, `.github/` holds Copilot-only formats), but they apply to the consumer's project after install. The template root uses `AGENTS.md` for universal root instructions because that's the consumer-facing convention. The kit itself uses `CLAUDE.md` because contributors here mostly work in Claude Code or Copilot.
+Files under [`template/`](template/) are **not** part of this repo's own agent surface. The installer copies them into consumer projects. The conventions inside `template/` mirror the kit-level ones (`.claude/` is canonical for cross-tool work, `.github/` holds Copilot-only formats), but they apply to the consumer's project after install. The template root uses `AGENTS.md` for universal root instructions because that's the consumer-facing convention. The kit root carries both files, with different jobs: this `CLAUDE.md` is the single source of truth, since contributors here mostly work in Claude Code or Copilot and both tools load it natively. [`AGENTS.md`](AGENTS.md) is a thin pointer to it for agents that read only `AGENTS.md`. Conventions get edited here, never there.
 
 ## When working in this repo
 
