@@ -49,7 +49,7 @@ if (-not (Test-Path $activeContext)) {
     # the file has stopped being a queue and started being an archive.
     $lineCount = (Get-Content $activeContext | Where-Object { $_.Trim() -ne '' }).Count
     if ($lineCount -gt $maxLines) {
-        $condition = " Warning: activeContext.md has $lineCount non-empty lines (limit is $maxLines). Run /update-working-memory to prune it."
+        $condition = " Warning: activeContext.md has $lineCount non-empty lines (limit is $maxLines). Use the update-working-memory skill or the supplied update script to prune it."
     }
 }
 

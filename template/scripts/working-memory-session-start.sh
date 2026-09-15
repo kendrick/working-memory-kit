@@ -45,7 +45,7 @@ else
   # the file has stopped being a queue and started being an archive.
   LINE_COUNT=$(grep -c '[^[:space:]]' "$WM_DIR/activeContext.md" || true)
   if [ "${LINE_COUNT:-0}" -gt "$MAX_LINES" ]; then
-    CONDITION=" Warning: activeContext.md has $LINE_COUNT non-empty lines (limit is $MAX_LINES). Run /update-working-memory to prune it."
+    CONDITION=" Warning: activeContext.md has $LINE_COUNT non-empty lines (limit is $MAX_LINES). Use the update-working-memory skill or the supplied update script to prune it."
   fi
 fi
 

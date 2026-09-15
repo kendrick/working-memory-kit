@@ -86,5 +86,5 @@ if [ -n "$REASON" ]; then
 fi
 
 if [ -n "$REASON" ]; then
-  echo "{\"systemMessage\":\"You changed $REASON this session.${EXTRA} Consider running /update-working-memory or @working-memory-synchronizer to keep the working memory current.\"}"
+  echo "{\"systemMessage\":\"You changed $REASON this session.${EXTRA} Use the update-working-memory skill or the supplied update script to keep working memory current.\"}"
 fi

@@ -1,0 +1,31 @@
+{
+  "description": "Working-memory lifecycle hooks for local Codex sessions.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/working-memory-session-start.sh\"",
+            "commandWindows": "powershell -NoProfile -Command \"& \\\"$(git rev-parse --show-toplevel)/scripts/working-memory-session-start.ps1\\\"\"",
+            "timeout": 10,
+            "statusMessage": "Loading working memory"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/working-memory-session-end.sh\"",
+            "commandWindows": "powershell -NoProfile -Command \"& \\\"$(git rev-parse --show-toplevel)/scripts/working-memory-session-end.ps1\\\"\"",
+            "timeout": 3,
+            "statusMessage": "Checking working memory"
+          }
+        ]
+      }
+    ]
+  }
+}
