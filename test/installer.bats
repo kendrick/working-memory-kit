@@ -15,6 +15,43 @@ teardown() { teardown_repo; }
   grep -q 'activeContext.md' .gitignore
 }
 
+@test "fresh install exposes Codex skills, hydrator, and lifecycle hooks" {
+  run_installer
+  [ -f .agents/skills/update-working-memory/SKILL.md ]
+  [ -f .agents/skills/hydrate-discover/SKILL.md ]
+  [ -f .agents/skills/hydrate-extract/SKILL.md ]
+  [ -f .agents/skills/hydrate-draft/SKILL.md ]
+  [ -f .agents/skills/hydrate-reconcile/SKILL.md ]
+  [ -f .agents/skills/hydrate-propose/SKILL.md ]
+  [ -f .codex/agents/hydrator.toml ]
+  [ -f .codex/hooks.json ]
+  cmp "$KIT_ROOT/template/.claude/skills/update-working-memory/SKILL.md" \
+      .agents/skills/update-working-memory/SKILL.md
+  for skill in hydrate-discover hydrate-extract hydrate-draft hydrate-reconcile hydrate-propose; do
+    cmp "$KIT_ROOT/.claude/skills/$skill/SKILL.md" ".agents/skills/$skill/SKILL.md"
+  done
+  node -e '
+    const hooks = require("./.codex/hooks.json");
+    const start = hooks.hooks.SessionStart[0].hooks[0];
+    const end = hooks.hooks.SessionEnd[0].hooks[0];
+    if (!start.command || !start.commandWindows) process.exit(1);
+    if (!end.command || !end.commandWindows || end.timeout !== 3) process.exit(1);
+    if (!start.command.includes("working-memory-session-start.sh")) process.exit(1);
+    if (!start.commandWindows.includes("working-memory-session-start.ps1")) process.exit(1);
+    if (!end.command.includes("working-memory-session-end.sh")) process.exit(1);
+    if (!end.commandWindows.includes("working-memory-session-end.ps1")) process.exit(1);
+  '
+}
+
+@test "Codex machinery renders custom memory paths and reconciles hook edits" {
+  run_installer_tty $'mem\n'
+  grep -q 'mem/' .agents/skills/update-working-memory/SKILL.md
+  printf '\n' >> .codex/hooks.json
+  run_installer_tty $'mem\nu\n'
+  [ -f .codex/hooks.json.kitnew ]
+  ! cmp -s .codex/hooks.json .codex/hooks.json.kitnew
+}
+
 @test "install is idempotent" {
   # package.json exercises the stack pre-fill paths, which must also be a no-op
   # on the second run (they're guarded by placeholder markers).
