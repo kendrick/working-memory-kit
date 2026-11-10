@@ -201,9 +201,13 @@ Describe 'installer' {
     }
 
     It 'a rooted rc dir (leading backslash) is refused and the default is used (#43)' {
-        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="\evil"'
+        # pwsh resolves a backslash-rooted path from the filesystem root, so point at a
+        # writable sibling of the repo, which the installer would create if the refusal failed.
+        $outside = "$repo-evil"
+        Set-Content .working-memoryrc ('WORKING_MEMORY_DIR="' + ($outside -replace '/', '\') + '"')
         Invoke-Installer | Should -Match 'ignoring WORKING_MEMORY_DIR='
         '_working-memory/decisionLog.md' | Should -Exist
+        $outside | Should -Not -Exist
     }
 
     It 'a drive-letter rc dir is refused and the default is used (#43)' {
