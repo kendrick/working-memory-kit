@@ -149,3 +149,25 @@ xref_inside_fence() {
   grep -qE '^MAX_ACTIVE_CONTEXT_LINES=15$' .working-memoryrc
   grep -qE '^external_spec_tooling="docs/specs"$' .working-memoryrc
 }
+
+@test "a registered path with an internal space survives a re-run (#42)" {
+  mkdir -p "docs/my specs"
+  run_installer --coexist-with "docs/my specs"
+  grep -qx 'external_spec_tooling="docs/my specs"' .working-memoryrc
+  git add -A; git commit -q -m base
+  run run_installer
+  [ "$status" -eq 0 ]
+  grep -q 'docs/my specs/' AGENTS.md
+  [ "$(grep -c 'myspecs' AGENTS.md)" -eq 0 ]       # bash -e ignores a bare `! cmd`, so count instead
+  echo "$output" | grep -q '(docs/my specs/)'      # coexistence map
+  run git status --porcelain
+  [ -z "$output" ]
+}
+
+@test "a CRLF .working-memoryrc value reads back without a carriage return (#42)" {
+  mkdir -p "docs/my specs"
+  printf 'external_spec_tooling="docs/my specs"\r\n' > .working-memoryrc
+  run_installer
+  grep -q 'docs/my specs/' AGENTS.md
+  [ "$(grep -c $'\r' AGENTS.md)" -eq 0 ]
+}

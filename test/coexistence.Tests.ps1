@@ -139,4 +139,15 @@ Describe 'coexistence' {
         Get-MatchCount '.working-memoryrc' '^MAX_ACTIVE_CONTEXT_LINES=15$' | Should -Be 1
         Get-MatchCount '.working-memoryrc' '^external_spec_tooling="docs/specs"$' | Should -Be 1
     }
+
+    It 'a registered path with an internal space survives a re-run (#42)' {
+        New-Item -ItemType Directory -Path 'docs/my specs' -Force | Out-Null
+        Invoke-Installer --coexist-with 'docs/my specs' | Out-Null
+        Get-Content .working-memoryrc | Should -Contain 'external_spec_tooling="docs/my specs"'
+        git add -A; git commit -q -m base
+        Invoke-Installer | Out-Null
+        Get-Content AGENTS.md -Raw | Should -Match 'docs/my specs/'
+        Get-Content AGENTS.md -Raw | Should -Not -Match 'myspecs'
+        git status --porcelain | Should -BeNullOrEmpty
+    }
 }
