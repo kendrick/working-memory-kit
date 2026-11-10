@@ -500,8 +500,14 @@ if ((-not $Neighbors) -and (-not $NoCoexist) -and ((Get-RcKey 'coexistence_asked
 # Consumer can override at install time; on override, the installer
 # substitutes the literal token in copied template files.
 $WmDirDefault = '_working-memory'
-$WmDir = $WmDirDefault
-$reply = Read-Prompt "Install working memory at $WmDirDefault/? [Y/n, or specify alternate path]"
+$wmDirRc = (Get-RcKey 'WORKING_MEMORY_DIR' '') -replace '[\\/]$', ''
+# The rc can arrive in someone else's commit, so refuse a value that would write outside the repo.
+if ($wmDirRc -and (($wmDirRc -match '^([\\/]|[A-Za-z]:)') -or (($wmDirRc -split '[\\/]') -contains '..'))) {
+    Write-Warn "ignoring WORKING_MEMORY_DIR=$wmDirRc in .working-memoryrc: it must be a relative path inside the repo"
+    $wmDirRc = ''
+}
+$WmDir = if ($wmDirRc) { $wmDirRc } else { $WmDirDefault }
+$reply = Read-Prompt "Install working memory at $WmDir/? [Y/n, or specify alternate path]"
 if ($reply -match '^(n|no)$') {
     $custom = Read-Prompt 'Enter alternate path (relative to repo root)'
     if ($custom) { $WmDir = $custom.TrimEnd('/').TrimEnd('\') }
@@ -549,6 +555,8 @@ if ($Mode -eq 'upgrade') { Write-Info 'upgrading...' } else { Write-Info 'scaffo
 
 # ---------- working-memory ----------
 
+# A headless re-run can't prompt for the dir, so without this key it forks a second _working-memory/.
+if (($WmDir -ne $WmDirDefault) -or $wmDirRc) { Set-RcKey 'WORKING_MEMORY_DIR' "`"$WmDir`"" }
 if (-not (Test-Path $WmDir)) { New-Item -ItemType Directory -Path $WmDir | Out-Null }
 # The kit-authored README and the example are machinery (kit-owned, reconciled).
 # The six memory files are the user's content: seeded once, never overwritten.

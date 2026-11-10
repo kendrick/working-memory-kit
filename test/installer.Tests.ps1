@@ -158,4 +158,45 @@ Describe 'installer' {
         '.github/instructions/working-memory.instructions.md.example' | Should -Exist
         @(Get-ChildItem .github/instructions -File | Where-Object { $_.Name -like '*.instructions.md' }).Count | Should -Be 0
     }
+
+    # ---- a custom working-memory dir persists in .working-memoryrc (#43). The
+    # prompts are unreachable headless, so these seed the rc to drive the read path. ----
+
+    It 'a seeded WORKING_MEMORY_DIR drives a headless install and re-run (#43)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="mem"'
+        Invoke-Installer | Out-Null
+        'mem/decisionLog.md' | Should -Exist
+        '_working-memory' | Should -Not -Exist
+        git add -A; git commit -q -m base
+        Invoke-Installer | Out-Null
+        '_working-memory' | Should -Not -Exist
+        Get-ChildItem -Recurse -Force -Filter '*.kitnew' | Should -BeNullOrEmpty
+        git status --porcelain | Should -BeNullOrEmpty
+    }
+
+    It 'deleting WORKING_MEMORY_DIR sends a headless re-run to _working-memory (#43)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="mem"'
+        Invoke-Installer | Out-Null
+        'mem/decisionLog.md' | Should -Exist
+        Set-Content .working-memoryrc ''
+        Invoke-Installer | Out-Null
+        '_working-memory' | Should -Exist
+    }
+
+    It 'an unrelated rc key change leaves the custom dir alone (#43)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="mem"'
+        Invoke-Installer | Out-Null
+        Add-Content .working-memoryrc 'NUDGE_FILE_THRESHOLD=9'
+        Invoke-Installer | Out-Null
+        '_working-memory' | Should -Not -Exist
+        Get-Content .working-memoryrc | Should -Contain 'WORKING_MEMORY_DIR="mem"'
+    }
+
+    It 'a default install writes no .working-memoryrc; an escaping rc dir is refused (#43)' {
+        Invoke-Installer | Out-Null
+        '.working-memoryrc' | Should -Not -Exist
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="../outside"'
+        Invoke-Installer | Should -Match 'WORKING_MEMORY_DIR'
+        '../outside' | Should -Not -Exist
+    }
 }
