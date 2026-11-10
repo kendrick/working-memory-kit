@@ -49,6 +49,23 @@ else
   fi
 fi
 
+# A raw quote, backslash, or control char in the message makes the host drop
+# it silently, so escape per RFC 8259. Pattern substitution (no per-char
+# subshell) keeps this cheap; the unquoted assignment matters on bash 3.2,
+# which keeps the inner quotes literally if the expansion is double-quoted.
+json_escape() {
+  local s="$1" i c u
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  for ((i = 1; i < 32; i++)); do
+    printf -v c '%b' "\\0$(printf '%o' "$i")"
+    printf -v u '\\u%04x' "$i"
+    s=${s//"$c"/"$u"}
+  done
+  printf '%s' "$s"
+}
+
 # {"systemMessage":"..."} on stdout is the hook protocol — the host surfaces
 # it to the user. Plain echoes get ignored.
-echo "{\"systemMessage\":\"${DIRECTIVE}${CONDITION}\"}"
+msg="${DIRECTIVE}${CONDITION}"
+printf '{"systemMessage":"%s"}\n' "$(json_escape "$msg")"

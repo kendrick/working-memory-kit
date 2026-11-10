@@ -85,6 +85,23 @@ if [ -n "$REASON" ]; then
   fi
 fi
 
+# A raw quote, backslash, or control char in the message makes the host drop
+# it silently, so escape per RFC 8259. Pattern substitution (no per-char
+# subshell) keeps this cheap; the unquoted assignment matters on bash 3.2,
+# which keeps the inner quotes literally if the expansion is double-quoted.
+json_escape() {
+  local s="$1" i c u
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  for ((i = 1; i < 32; i++)); do
+    printf -v c '%b' "\\0$(printf '%o' "$i")"
+    printf -v u '\\u%04x' "$i"
+    s=${s//"$c"/"$u"}
+  done
+  printf '%s' "$s"
+}
+
 if [ -n "$REASON" ]; then
-  echo "{\"systemMessage\":\"You changed $REASON this session.${EXTRA} Use the update-working-memory skill or the supplied update script to keep working memory current.\"}"
+  msg="You changed $REASON this session.${EXTRA} Use the update-working-memory skill or the supplied update script to keep working memory current."
+  printf '{"systemMessage":"%s"}\n' "$(json_escape "$msg")"
 fi
