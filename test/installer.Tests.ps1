@@ -199,4 +199,16 @@ Describe 'installer' {
         Invoke-Installer | Should -Match 'WORKING_MEMORY_DIR'
         '../outside' | Should -Not -Exist
     }
+
+    It 'a rooted rc dir (leading backslash) is refused and the default is used (#43)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="\evil"'
+        Invoke-Installer | Should -Match 'ignoring WORKING_MEMORY_DIR='
+        '_working-memory/decisionLog.md' | Should -Exist
+    }
+
+    It 'a drive-letter rc dir is refused and the default is used (#43)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="C:\evil"'
+        Invoke-Installer | Should -Match 'ignoring WORKING_MEMORY_DIR='
+        '_working-memory/decisionLog.md' | Should -Exist
+    }
 }
