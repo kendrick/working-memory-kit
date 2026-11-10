@@ -396,6 +396,17 @@ set_rc_key() {
   fi
 }
 
+# The rc can arrive in someone else's commit, so refuse a value that would write outside the repo.
+wm_dir_outside_repo() {
+  case "$1" in
+    /*|\\*|[A-Za-z]:*) return 0 ;;
+  esac
+  case "/${1//\\//}/" in
+    */../*) return 0 ;;
+  esac
+  return 1
+}
+
 # ---------- parse args ----------
 
 # --coexist-with <path> registers external spec tooling the registry doesn't know;
@@ -574,12 +585,10 @@ fi
 WM_DIR_DEFAULT="_working-memory"
 WM_DIR_RC="$(read_rc WORKING_MEMORY_DIR "")"
 WM_DIR_RC="${WM_DIR_RC%/}"
-# A cloned repo's rc is someone else's commit, so never let it point the installer outside the repo.
-case "$WM_DIR_RC" in
-  /*|..|../*|*/..|*/../*)
-    warn "ignoring WORKING_MEMORY_DIR=\"$WM_DIR_RC\" in .working-memoryrc: it must be a path inside the repo"
-    WM_DIR_RC="" ;;
-esac
+if [ -n "$WM_DIR_RC" ] && wm_dir_outside_repo "$WM_DIR_RC"; then
+  warn "ignoring WORKING_MEMORY_DIR=\"$WM_DIR_RC\" in .working-memoryrc: it must be a relative path inside the repo"
+  WM_DIR_RC=""
+fi
 WM_DIR="${WM_DIR_RC:-$WM_DIR_DEFAULT}"
 printf "Install working memory at %s/? [Y/n, or specify alternate path] " "$WM_DIR"
 prompt_read wm_reply
@@ -641,9 +650,13 @@ if [ "$MODE" = "upgrade" ]; then info "upgrading..."; else info "scaffolding..."
 
 # ---------- working-memory ----------
 
-# A headless re-run can't prompt, so without the saved dir it would fork a second _working-memory/.
+# A headless re-run can't prompt for the dir, so without this key it forks a second _working-memory/.
 if [ "$WM_DIR" != "$WM_DIR_DEFAULT" ] || [ -n "$WM_DIR_RC" ]; then
-  set_rc_key WORKING_MEMORY_DIR "\"$WM_DIR\""
+  if wm_dir_outside_repo "$WM_DIR"; then
+    warn "not saving WORKING_MEMORY_DIR=\"$WM_DIR\": it points outside the repo, so a re-run won't reuse it"
+  else
+    set_rc_key WORKING_MEMORY_DIR "\"$WM_DIR\""
+  fi
 fi
 mkdir -p "$TARGET_DIR/$WM_DIR"
 # The kit-authored README and the example are machinery (kit-owned, reconciled).

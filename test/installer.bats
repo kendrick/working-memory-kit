@@ -223,3 +223,35 @@ teardown() { teardown_repo; }
   echo "$output" | grep -q 'WORKING_MEMORY_DIR'
   [ ! -d ../outside ]
 }
+
+@test "an absolute rc dir is refused and nothing is created there (#43)" {
+  printf 'WORKING_MEMORY_DIR="%s"\n' "$BATS_TEST_TMPDIR/abs" > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF "ignoring WORKING_MEMORY_DIR=\"$BATS_TEST_TMPDIR/abs\" in .working-memoryrc: it must be a relative path inside the repo"
+  [ ! -e "$BATS_TEST_TMPDIR/abs" ]
+  [ -d _working-memory ]
+}
+
+@test "a drive-letter or backslash-escaping rc dir is refused (#43)" {
+  printf 'WORKING_MEMORY_DIR="C:/x"\n' > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF 'ignoring WORKING_MEMORY_DIR="C:/x" in .working-memoryrc: it must be a relative path inside the repo'
+  [ ! -e C: ]
+  printf 'WORKING_MEMORY_DIR="..\\x"\n' > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF 'ignoring WORKING_MEMORY_DIR="..\x" in .working-memoryrc: it must be a relative path inside the repo'
+  [ ! -e '..\x' ]
+}
+
+@test "a prompt answer outside the repo is used but not saved (#43)" {
+  # Install from a subdir so ../sib stays inside TESTDIR and teardown removes it.
+  mkdir repo && cd repo && git init -q
+  run run_installer_tty $'n\n../sib\n'
+  [ -d ../sib ]
+  echo "$output" | grep -qF 'not saving WORKING_MEMORY_DIR="../sib": it points outside the repo, so a re-run won'"'"'t reuse it'
+  run grep -q '^WORKING_MEMORY_DIR=' .working-memoryrc
+  [ "$status" -ne 0 ]
+}
