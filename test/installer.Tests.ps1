@@ -203,16 +203,23 @@ Describe 'installer' {
     It 'a rooted rc dir (leading backslash) is refused and the default is used (#43)' {
         # pwsh resolves a backslash-rooted path from the filesystem root, so point at a
         # writable sibling of the repo, which the installer would create if the refusal failed.
+        # Windows repos are drive-qualified, so strip the drive to keep the seed leading with a backslash.
         $outside = "$repo-evil"
-        Set-Content .working-memoryrc ('WORKING_MEMORY_DIR="' + ($outside -replace '/', '\') + '"')
+        $rooted = ($outside -replace '/', '\') -replace '^[A-Za-z]:', ''
+        Set-Content .working-memoryrc ('WORKING_MEMORY_DIR="' + $rooted + '"')
         Invoke-Installer | Should -Match 'ignoring WORKING_MEMORY_DIR='
         '_working-memory/decisionLog.md' | Should -Exist
         $outside | Should -Not -Exist
     }
 
     It 'a drive-letter rc dir is refused and the default is used (#43)' {
-        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="C:\evil"'
+        # Where $repo has a drive, seed a unique sibling so a stray dir on the runner can't fail the
+        # no-write assert. Without a drive, C:\evil can't exist, so the assert only bites on Windows.
+        $outside = 'C:\evil'
+        if ($repo -match '^[A-Za-z]:') { $outside = "$repo-evil2" -replace '/', '\' }
+        Set-Content .working-memoryrc ('WORKING_MEMORY_DIR="' + $outside + '"')
         Invoke-Installer | Should -Match 'ignoring WORKING_MEMORY_DIR='
         '_working-memory/decisionLog.md' | Should -Exist
+        $outside | Should -Not -Exist
     }
 }
