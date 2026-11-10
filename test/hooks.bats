@@ -82,6 +82,21 @@ for p in ["src/\"x\".ts", "src\\y.ts", "src\\t.ts"]:
 '
 }
 
+@test "session-end JSON escapes a real tab in a pointer (#41)" {
+  printf 'NUDGE_FILE_THRESHOLD=1\nNUDGE_LINE_THRESHOLD=1\n' > .working-memoryrc
+  printf '# Data Contracts\n\nSee [a](src/a\tb.ts).\n' > _working-memory/dataContracts.md
+  commit_base
+  printf 'a\n' > f1.txt; printf 'b\n' > f2.txt
+  git add -A
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | python3 -c '
+import json, sys
+m = json.load(sys.stdin)["systemMessage"]
+assert "src/a\tb.ts" in m, m
+'
+}
+
 @test "session-start JSON parses and keeps a backslash in a custom dir name (#41)" {
   mkdir 'mem\t'
   sed 's|_working-memory|mem\\t|g' "$KIT_ROOT/template/scripts/working-memory-session-start.sh" > start.sh
