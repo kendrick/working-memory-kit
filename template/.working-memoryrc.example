@@ -43,3 +43,9 @@ NUDGE_LINE_THRESHOLD=200
 
 # Set to true once you've answered, so the installer stops suggesting --coexist-with.
 # coexistence_asked=true
+
+# --- working-memory dir ---
+# The installer writes this when you choose a dir other than the default at install.
+# Re-runs, headless ones included, reuse that dir. An absolute path or one with a
+# ".." segment is rejected with a warning, and the default is used.
+# WORKING_MEMORY_DIR="_working-memory"
