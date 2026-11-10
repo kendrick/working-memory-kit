@@ -374,11 +374,13 @@ EOF
   return 0
 }
 
-# Reads a key from the live .working-memoryrc with the same parser the hooks use
-# (anchored on ^key=, quotes/spaces stripped), so what we persist stays readable.
+# Mirrors Get-RcKey in init.ps1 so both installers read back what they wrote.
+# Trim only the edges, so a path like "docs/my specs" keeps its inner space;
+# [[:space:]] also drops the \r a CRLF rc leaves. Grep, never source, so a
+# hostile rc can't run code.
 read_rc() {
   local key="$1" default="$2" file="$TARGET_DIR/.working-memoryrc" val=""
-  [ -f "$file" ] && val=$(grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' "'\''')
+  [ -f "$file" ] && val=$(grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- | sed -E -e 's/^[[:space:]]+//' -e 's/[[:space:]]+$//' -e 's/^"+//' -e 's/"+$//' -e "s/^'+//" -e "s/'+\$//")
   echo "${val:-$default}"
 }
 
