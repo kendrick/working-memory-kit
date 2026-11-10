@@ -55,4 +55,6 @@ if (-not (Test-Path $activeContext)) {
 
 # {"systemMessage":"..."} on stdout is the hook protocol — the host surfaces
 # it to the user. Plain Write-Host calls get ignored.
-Write-Output "{`"systemMessage`":`"$directive$condition`"}"
+# A quote or backslash in the dir name must reach the host escaped.
+$msg = "$directive$condition"
+Write-Output ([pscustomobject]@{ systemMessage = $msg } | ConvertTo-Json -Compress)

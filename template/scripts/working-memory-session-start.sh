@@ -49,6 +49,22 @@ else
   fi
 fi
 
+# A raw quote, backslash, or control char makes the host drop the message
+# silently. The assignments stay unquoted because bash 3.2 keeps the inner
+# quotes literally in a double-quoted ${s//"$c"/"$u"}.
+json_escape() {
+  local s="$1" i c u
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  for ((i = 1; i < 32; i++)); do
+    printf -v c '%b' "\\0$(printf '%o' "$i")"
+    printf -v u '\\u%04x' "$i"
+    s=${s//"$c"/"$u"}
+  done
+  printf '%s' "$s"
+}
+
 # {"systemMessage":"..."} on stdout is the hook protocol — the host surfaces
 # it to the user. Plain echoes get ignored.
-echo "{\"systemMessage\":\"${DIRECTIVE}${CONDITION}\"}"
+msg="${DIRECTIVE}${CONDITION}"
+printf '{"systemMessage":"%s"}\n' "$(json_escape "$msg")"
