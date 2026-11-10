@@ -82,7 +82,7 @@ if ($reason) {
             if ($path -match '^(https?://|mailto:)') { continue }
             $rootResolved = Join-Path $repoRoot $path
             $wmResolved   = Join-Path $repoRoot (Join-Path '_working-memory' $path)
-            if ((Test-Path $rootResolved) -or (Test-Path $wmResolved)) { continue }
+            if ((Test-Path $rootResolved -ErrorAction SilentlyContinue) -or (Test-Path $wmResolved -ErrorAction SilentlyContinue)) { continue }
             $broken += $path
         }
         if ($broken.Count -gt 0) {
@@ -92,5 +92,8 @@ if ($reason) {
 }
 
 if ($reason) {
-    Write-Output "{`"systemMessage`":`"You changed $reason this session.$extra Use the update-working-memory skill or the supplied update script to keep working memory current.`"}"
+    # ConvertTo-Json escapes for us; hand-built JSON broke on a quote or
+    # backslash in a pointer.
+    $msg = "You changed $reason this session.$extra Use the update-working-memory skill or the supplied update script to keep working memory current."
+    Write-Output ([pscustomobject]@{ systemMessage = $msg } | ConvertTo-Json -Compress)
 }

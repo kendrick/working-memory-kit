@@ -58,4 +58,26 @@ Describe 'session-end hook' {
         $out = Invoke-SessionEndHook
         $out | Should -Match 'broken pointer'
     }
+
+    # The hooks used to hand-build the JSON, so a quote or backslash in a
+    # pointer corrupted it. Decode and compare strings, not raw bytes.
+    It 'session-end JSON survives a quote and a backslash in pointers (#41)' {
+        Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=1`nNUDGE_LINE_THRESHOLD=1"
+        Set-Content '_working-memory/dataContracts.md' "# Data Contracts`n`nSee [a](src/`"x`".ts), [b](src\y.ts).`n"
+        git add -A; git commit -q -m base
+        Set-Content f1.txt 'a'
+        Set-Content f2.txt 'b'
+        git add -A
+        $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+        $msg | Should -BeLike '*src/"x".ts*'
+        $msg | Should -BeLike '*src\y.ts*'
+    }
+
+    # Parity guard: today's start message has no quote or backslash, so this
+    # passes before the fix too.
+    It 'session-start output parses as JSON (#41)' {
+        Set-Content '_working-memory/activeContext.md' 'x'
+        $out = & (Join-Path $KitRoot 'template/scripts/working-memory-session-start.ps1') | Out-String
+        ($out | ConvertFrom-Json).systemMessage | Should -BeLike "*AGENTS.md's*"
+    }
 }
