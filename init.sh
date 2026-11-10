@@ -572,8 +572,16 @@ fi
 # Consumer can override at install time; on override, the installer
 # substitutes the literal token in copied template files.
 WM_DIR_DEFAULT="_working-memory"
-WM_DIR="$WM_DIR_DEFAULT"
-printf "Install working memory at %s/? [Y/n, or specify alternate path] " "$WM_DIR_DEFAULT"
+WM_DIR_RC="$(read_rc WORKING_MEMORY_DIR "")"
+WM_DIR_RC="${WM_DIR_RC%/}"
+# A cloned repo's rc is someone else's commit, so never let it point the installer outside the repo.
+case "$WM_DIR_RC" in
+  /*|..|../*|*/..|*/../*)
+    warn "ignoring WORKING_MEMORY_DIR=\"$WM_DIR_RC\" in .working-memoryrc: it must be a path inside the repo"
+    WM_DIR_RC="" ;;
+esac
+WM_DIR="${WM_DIR_RC:-$WM_DIR_DEFAULT}"
+printf "Install working memory at %s/? [Y/n, or specify alternate path] " "$WM_DIR"
 prompt_read wm_reply
 # shellcheck disable=SC2154  # wm_reply is set indirectly by prompt_read
 case "$wm_reply" in
@@ -633,6 +641,10 @@ if [ "$MODE" = "upgrade" ]; then info "upgrading..."; else info "scaffolding..."
 
 # ---------- working-memory ----------
 
+# A headless re-run can't prompt, so without the saved dir it would fork a second _working-memory/.
+if [ "$WM_DIR" != "$WM_DIR_DEFAULT" ] || [ -n "$WM_DIR_RC" ]; then
+  set_rc_key WORKING_MEMORY_DIR "\"$WM_DIR\""
+fi
 mkdir -p "$TARGET_DIR/$WM_DIR"
 # The kit-authored README and the example are machinery (kit-owned, reconciled).
 # The six memory files are the user's content: seeded once, never overwritten.

@@ -182,10 +182,44 @@ teardown() { teardown_repo; }
 @test "a custom working-memory dir re-runs clean" {
   run_installer_tty $'mem\n'                     # fresh install into mem/
   [ -d mem ]
+  grep -qx 'WORKING_MEMORY_DIR="mem"' .working-memoryrc
   git add -A; git commit -q -m base
   run_installer_tty $'mem\nu\n'                  # re-run, choose Upgrade
   run git status --porcelain
   [ -z "$output" ]
   run find . -name '*.kitnew'
   [ -z "$output" ]
+  run_installer                                  # headless re-run (#43)
+  [ ! -d _working-memory ]
+  [ "$(grep -c '_working-memory' AGENTS.md)" -eq 0 ]
+  run git status --porcelain; [ -z "$output" ]
+  run find . -name '*.kitnew'; [ -z "$output" ]
+}
+
+@test "deleting WORKING_MEMORY_DIR sends a headless re-run to _working-memory (#43)" {
+  run_installer_tty $'mem\n'
+  grep -qx 'WORKING_MEMORY_DIR="mem"' .working-memoryrc
+  perl -i -ne 'print unless /^WORKING_MEMORY_DIR=/' .working-memoryrc
+  run_installer
+  [ -d _working-memory ]
+}
+
+@test "an unrelated rc key change leaves the custom dir alone (#43)" {
+  run_installer_tty $'mem\n'
+  printf 'NUDGE_FILE_THRESHOLD=9\n' >> .working-memoryrc
+  git add -A; git commit -q -m base
+  run_installer
+  [ ! -d _working-memory ]
+  grep -qx 'WORKING_MEMORY_DIR="mem"' .working-memoryrc
+  run git status --porcelain; [ -z "$output" ]
+}
+
+@test "a default install writes no .working-memoryrc; an escaping rc dir is refused (#43)" {
+  run_installer
+  [ ! -f .working-memoryrc ]
+  printf 'WORKING_MEMORY_DIR="../outside"\n' > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q 'WORKING_MEMORY_DIR'
+  [ ! -d ../outside ]
 }
