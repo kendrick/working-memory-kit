@@ -59,8 +59,8 @@ Describe 'session-end hook' {
         $out | Should -Match 'broken pointer'
     }
 
-    # The hooks used to hand-build the JSON, so a quote or backslash in a
-    # pointer corrupted it. Decode and compare strings, not raw bytes.
+    # Windows PowerShell 5.1 and pwsh 7 escape differently (5.1 writes ' as
+    # \u0027), so decode and compare strings, not raw bytes.
     It 'session-end JSON survives a quote and a backslash in pointers (#41)' {
         Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=1`nNUDGE_LINE_THRESHOLD=1"
         Set-Content '_working-memory/dataContracts.md' "# Data Contracts`n`nSee [a](src/`"x`".ts), [b](src\y.ts).`n"

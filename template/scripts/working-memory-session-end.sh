@@ -85,10 +85,9 @@ if [ -n "$REASON" ]; then
   fi
 fi
 
-# A raw quote, backslash, or control char in the message makes the host drop
-# it silently, so escape per RFC 8259. Pattern substitution (no per-char
-# subshell) keeps this cheap; the unquoted assignment matters on bash 3.2,
-# which keeps the inner quotes literally if the expansion is double-quoted.
+# A raw quote, backslash, or control char makes the host drop the message
+# silently. The assignments stay unquoted because bash 3.2 keeps the inner
+# quotes literally in a double-quoted ${s//"$c"/"$u"}.
 json_escape() {
   local s="$1" i c u
   s=${s//\\/\\\\}

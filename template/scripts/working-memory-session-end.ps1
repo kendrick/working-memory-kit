@@ -92,8 +92,8 @@ if ($reason) {
 }
 
 if ($reason) {
-    # ConvertTo-Json escapes for us; hand-built JSON broke on a quote or
-    # backslash in a pointer.
+    # A quote or backslash in a pointer must reach the host escaped, or the
+    # host drops the message silently.
     $msg = "You changed $reason this session.$extra Use the update-working-memory skill or the supplied update script to keep working memory current."
     Write-Output ([pscustomobject]@{ systemMessage = $msg } | ConvertTo-Json -Compress)
 }
