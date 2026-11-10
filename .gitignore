@@ -1,0 +1,2 @@
+# Per-machine Claude Code settings belong in .claude/settings.local.json.
+/.claude/settings.json
