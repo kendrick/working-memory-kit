@@ -345,3 +345,12 @@ teardown() { teardown_repo; }
   [ "$(count_hook SessionStart my-working-memory-session-start.sh)" -eq 1 ]
   [ "$(count_hook SessionStart 'CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh')" -eq 1 ]
 }
+
+@test "fresh install: no template example reads as a dated log entry (#37)" {
+  run_installer
+  run grep -E '^## [0-9]{4}-' _working-memory/decisionLog.md _working-memory/antipatterns.md
+  [ "$status" -eq 1 ]                                              # no match at all
+  grep -q '^<!-- ## YYYY-MM-DD: ' _working-memory/decisionLog.md   # example kept, commented
+  grep -q '^<!-- ## YYYY-MM-DD: ' _working-memory/antipatterns.md
+  ! grep -q '—' _working-memory/antipatterns.md                    # no em dash left in the format
+}

@@ -291,4 +291,14 @@ Describe 'installer' {
         Get-HookCount 'SessionStart' 'my-working-memory-session-start.sh' | Should -Be 1
         Get-HookCount 'SessionStart' 'CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh' | Should -Be 1
     }
+
+    It 'fresh install: no template example reads as a dated log entry (#37)' {
+        Invoke-Installer | Out-Null
+        $logs = '_working-memory/decisionLog.md', '_working-memory/antipatterns.md'
+        Select-String -Path $logs -Pattern '^## \d{4}-' | Should -BeNullOrEmpty
+        foreach ($log in $logs) {
+            Select-String -Path $log -Pattern '^<!-- ## YYYY-MM-DD: ' | Should -Not -BeNullOrEmpty
+        }
+        Get-Content _working-memory/antipatterns.md -Raw | Should -Not -Match '—'
+    }
 }
