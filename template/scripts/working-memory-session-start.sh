@@ -64,7 +64,11 @@ json_escape() {
   printf '%s' "$s"
 }
 
-# {"systemMessage":"..."} on stdout is the hook protocol — the host surfaces
-# it to the user. Plain echoes get ignored.
+# Copilot and Codex show systemMessage to the user, but Claude Code never
+# passes it to the model; context there goes in via additionalContext.
 msg="${DIRECTIVE}${CONDITION}"
-printf '{"systemMessage":"%s"}\n' "$(json_escape "$msg")"
+if [ "${1:-}" = "--claude" ]; then
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "$msg")"
+else
+  printf '{"systemMessage":"%s"}\n' "$(json_escape "$msg")"
+fi

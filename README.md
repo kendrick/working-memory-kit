@@ -114,6 +114,7 @@ The installer is the canonical setup. If your environment forbids piping `curl` 
 - `.claude/agents/` and `.claude/skills/` (read by both Claude Code and VS Code Copilot):
   - `working-memory-synchronizer` agent and `update-working-memory` skill—the **ongoing maintenance** surface.
   - `hydrator` agent and `hydrate-{discover,extract,draft,reconcile,propose}` skills—the **one-time onboarding** surface for brownfield installs.
+- `.claude/settings.json` with SessionStart and SessionEnd hooks that run the session scripts in Claude Code. If the file already exists, the installer adds the two hook entries and leaves every other setting and hook alone. It replaces an earlier entry that runs one of the same session scripts, including a `.ps1` variant you added, so each script runs once. If the file isn't valid JSON, the installer warns and leaves it untouched. Claude Code adds the start directive to the session's context but throws away SessionEnd hook output, so the end-of-session nudge never shows in Claude Code.
 - `.agents/skills/` (read by Codex): the same `update-working-memory` and `hydrate-*` skills, installed from the canonical `.claude` sources.
 - `.codex/agents/hydrator.toml` and `.codex/hooks.json` for Codex’s composite hydration workflow and lifecycle hooks.
 - `.github/hooks/working-memory-hooks.json` and `.github/instructions/working-memory.instructions.md.example` if your project uses GitHub Copilot (these formats are Copilot-specific; the `.example` is an inert sample you copy to `working-memory.instructions.md` to switch on)
@@ -134,7 +135,7 @@ It also adds `_working-memory/activeContext.md` to `.gitignore`. `activeContext`
 
 ## How it works
 
-Every session starts with a read of `activeContext.md`. The session-start hook warns you if it's grown past the line limit.
+Every session starts with a read of `activeContext.md`. The session-start hook warns you if it's grown past the line limit. In Claude Code, the agent gets that warning instead, along with an instruction to prune the file.
 
 The other six files load on demand. `AGENTS.md` or `.github/copilot-instructions.md` (depending on your project tooling) tell the agent which file to open for which kind of work:
 
@@ -143,7 +144,7 @@ The other six files load on demand. `AGENTS.md` or `.github/copilot-instructions
 - Project-wide patterns via `conventions.md`
 - Rejected approaches via `antipatterns.md`
 
-After meaningful work, you (or the synchronizer agent) move completed items out of `activeContext.md` and into `decisionLog.md`. The session-end hook nudges you when the diff suggests an update is overdue, by default when you've changed 5+ files **or** 200+ lines.
+After meaningful work, you (or the synchronizer agent) move completed items out of `activeContext.md` and into `decisionLog.md`. The session-end hook nudges you when the diff suggests an update is overdue, by default when you've changed 5+ files **or** 200+ lines. Claude Code users don't see this nudge, because Claude Code throws away SessionEnd hook output.
 
 Manual sync: use `/update-working-memory` in Claude Code or GitHub Copilot Chat, `$update-working-memory` in Codex, or the `working-memory-synchronizer` agent where your tool supports it. From any terminal, `./scripts/update-working-memory.sh` prints the active config and current state.
 
@@ -269,7 +270,7 @@ working-memory-kit/
 ├── template/                # Files copied into the consumer's project
 │   ├── _working-memory/
 │   ├── AGENTS.md
-│   ├── .claude/{agents,skills}/
+│   ├── .claude/{agents,skills,settings.json}
 │   ├── .codex/{agents,hooks.json}
 │   ├── .github/{copilot-instructions.md,hooks,instructions}/
 │   ├── scripts/

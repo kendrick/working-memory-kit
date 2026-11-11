@@ -4,6 +4,16 @@
 
 load helpers
 
+# Exits 2 if the event isn't an array, so a shape regression fails loudly.
+count_hook() {
+  node -e '
+    const s = require(process.cwd() + "/.claude/settings.json");
+    const g = (s.hooks || {})[process.argv[1]] || [];
+    if (!Array.isArray(g)) process.exit(2);
+    console.log(g.flatMap(x => x.hooks || []).filter(h => (h.command || "").includes(process.argv[2])).length);
+  ' "$1" "$2"
+}
+
 setup() { setup_repo; }
 teardown() { teardown_repo; }
 
@@ -279,4 +289,59 @@ teardown() { teardown_repo; }
   run_installer_tty $'a&b\\c\n'
   grep -qF 'a&b\c/activeContext.md' '.claude/skills/update-working-memory/SKILL.md'
   grep -qF 'a&b\c/' AGENTS.md
+}
+
+@test "fresh install writes Claude Code session hooks that run (#36)" {
+  run_installer
+  [ "$(count_hook SessionStart working-memory-session-start.sh)" -eq 1 ]
+  [ "$(count_hook SessionEnd working-memory-session-end.sh)" -eq 1 ]
+  cmd="$(node -e 'console.log(require(process.cwd()+"/.claude/settings.json").hooks.SessionStart[0].hooks[0].command)')"
+  CLAUDE_PROJECT_DIR="$PWD" bash -c "$cmd" | python3 -c 'import json,sys; assert json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"]'
+}
+
+@test "re-install keeps one copy of each Claude hook and a pre-existing hook (#36)" {
+  mkdir -p .claude
+  printf '%s\n' '{"permissions":{"allow":["Bash(ls)"]},"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"echo mine"}]}]}}' > .claude/settings.json
+  run_installer
+  git add -A; git commit -q -m base
+  run_installer
+  [ "$(count_hook SessionStart 'echo mine')" -eq 1 ]
+  [ "$(count_hook SessionStart working-memory-session-start.sh)" -eq 1 ]
+  [ "$(count_hook SessionEnd working-memory-session-end.sh)" -eq 1 ]
+  node -e 'const s=require(process.cwd()+"/.claude/settings.json"); if (s.permissions.allow[0] !== "Bash(ls)") process.exit(1)'
+  run git status --porcelain; [ -z "$output" ]
+}
+
+@test "an invalid .claude/settings.json is left alone with a warning (#36)" {
+  mkdir -p .claude
+  printf '{ "hooks": ,\n' > .claude/settings.json
+  cp .claude/settings.json "$BATS_TEST_TMPDIR/orig"
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q 'not valid JSON'
+  cmp .claude/settings.json "$BATS_TEST_TMPDIR/orig"
+}
+
+@test "re-install swaps an old kit entry for the current one and drops its duplicate (#36)" {
+  mkdir -p .claude
+  printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"echo mine"},{"type":"command","command":"bash scripts/working-memory-session-start.sh","timeout":5}]},{"hooks":[{"type":"command","command":"bash scripts/working-memory-session-start.sh"}]}]}}' > .claude/settings.json
+  run_installer
+  [ "$(count_hook SessionStart 'echo mine')" -eq 1 ]
+  [ "$(count_hook SessionStart working-memory-session-start.sh)" -eq 1 ]
+  node -e '
+    const s = require(process.cwd() + "/.claude/settings.json");
+    const t = require(process.argv[1]);
+    const g = s.hooks.SessionStart;
+    if (g.length !== 1 || g[0].matcher !== "startup") process.exit(1);
+    const h = g[0].hooks[1], k = t.hooks.SessionStart[0].hooks[0];
+    if (h.command !== k.command || h.timeout !== k.timeout) process.exit(1);
+  ' "$KIT_ROOT/template/.claude/settings.json"
+}
+
+@test "re-install keeps a user hook whose script name only ends in the kit's (#36)" {
+  mkdir -p .claude
+  printf '%s\n' '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash scripts/my-working-memory-session-start.sh"}]}]}}' > .claude/settings.json
+  run_installer
+  [ "$(count_hook SessionStart my-working-memory-session-start.sh)" -eq 1 ]
+  [ "$(count_hook SessionStart 'CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh')" -eq 1 ]
 }

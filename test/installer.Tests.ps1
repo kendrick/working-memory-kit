@@ -1,6 +1,16 @@
 # Parity twin of test/installer.bats: the installer invariants on PowerShell.
 
-BeforeAll { . (Join-Path $PSScriptRoot 'Common.ps1') }
+BeforeAll {
+    . (Join-Path $PSScriptRoot 'Common.ps1')
+
+    # Asserts the event stays a JSON array: a PS round trip can collapse one group to an object.
+    function Get-HookCount ($eventName, $fragment) {
+        $s = Get-Content .claude/settings.json -Raw | ConvertFrom-Json
+        $groups = $s.hooks.$eventName
+        $groups -is [array] | Should -BeTrue
+        return @($groups | ForEach-Object { $_.hooks } | Where-Object { "$($_.command)".Contains($fragment) }).Count
+    }
+}
 
 Describe 'installer' {
     BeforeEach { $repo = New-TestRepo }
@@ -231,5 +241,54 @@ Describe 'installer' {
             Get-ChildItem -Recurse -Force -Filter PWNED | Should -BeNullOrEmpty
             (Get-Content -Raw scripts/working-memory-session-start.ps1).Contains($dir) | Should -BeFalse
         }
+    }
+
+    It 'fresh install writes Claude Code session hooks (#36)' {
+        Invoke-Installer | Out-Null
+        Get-HookCount 'SessionStart' 'working-memory-session-start.sh' | Should -Be 1
+        Get-HookCount 'SessionEnd' 'working-memory-session-end.sh' | Should -Be 1
+    }
+
+    It 're-install keeps one copy of each Claude hook and a pre-existing hook (#36)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json '{"permissions":{"allow":["Bash(ls)"]},"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"echo mine"}]}]}}'
+        Invoke-Installer | Out-Null
+        git add -A; git commit -q -m base
+        Invoke-Installer | Out-Null
+        Get-HookCount 'SessionStart' 'echo mine' | Should -Be 1
+        Get-HookCount 'SessionStart' 'working-memory-session-start.sh' | Should -Be 1
+        Get-HookCount 'SessionEnd' 'working-memory-session-end.sh' | Should -Be 1
+        (Get-Content .claude/settings.json -Raw | ConvertFrom-Json).permissions.allow[0] | Should -Be 'Bash(ls)'
+        git status --porcelain | Should -BeNullOrEmpty
+    }
+
+    It 'an invalid .claude/settings.json is left alone with a warning (#36)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json '{ "hooks": ,'
+        $before = (Get-FileHash .claude/settings.json).Hash
+        Invoke-Installer | Should -Match ([regex]::Escape(' is not valid JSON (or not the settings shape Claude Code reads); left it as-is. Fix it and re-run to get the working-memory hooks.'))
+        (Get-FileHash .claude/settings.json).Hash | Should -Be $before
+    }
+
+    It 're-install swaps an old kit entry for the current one and drops its duplicate (#36)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"echo mine"},{"type":"command","command":"bash scripts/working-memory-session-start.sh","timeout":5}]},{"hooks":[{"type":"command","command":"bash scripts/working-memory-session-start.sh"}]}]}}'
+        Invoke-Installer | Out-Null
+        Get-HookCount 'SessionStart' 'echo mine' | Should -Be 1
+        Get-HookCount 'SessionStart' 'working-memory-session-start.sh' | Should -Be 1
+        $groups = @((Get-Content .claude/settings.json -Raw | ConvertFrom-Json).hooks.SessionStart)
+        $kit = (Get-Content (Join-Path $KitRoot 'template/.claude/settings.json') -Raw | ConvertFrom-Json).hooks.SessionStart[0].hooks[0]
+        $groups.Count | Should -Be 1
+        $groups[0].matcher | Should -Be 'startup'
+        $groups[0].hooks[1].command | Should -Be $kit.command
+        $groups[0].hooks[1].timeout | Should -Be $kit.timeout
+    }
+
+    It 're-install keeps a user hook whose script name only ends in the kit''s (#36)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash scripts/my-working-memory-session-start.sh"}]}]}}'
+        Invoke-Installer | Out-Null
+        Get-HookCount 'SessionStart' 'my-working-memory-session-start.sh' | Should -Be 1
+        Get-HookCount 'SessionStart' 'CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh' | Should -Be 1
     }
 }
