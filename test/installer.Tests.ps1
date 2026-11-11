@@ -308,6 +308,7 @@ Describe 'installer' {
             $lines = Get-Content $log
             $i = 0..($lines.Count - 1) | Where-Object { $lines[$_] -match '^<!-- ## YYYY-MM-DD: ' } | Select-Object -First 1
             $lines[$i + 1] | Should -Be '<!-- status: accepted -->'
+            $lines[$i + 2] | Should -Match '^<!-- *-->$'
             Get-Content $log -Raw | Should -Match 'superseded_by'
         }
         Get-Content AGENTS.md -Raw | Should -Match 'status: superseded'

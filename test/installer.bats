@@ -360,6 +360,8 @@ teardown() { teardown_repo; }
   for f in _working-memory/decisionLog.md _working-memory/antipatterns.md; do
     run awk '/^<!-- ## YYYY-MM-DD: /{getline n; print n; exit}' "$f"
     [ "$output" = "<!-- status: accepted -->" ]
+    run awk '/^<!-- ## YYYY-MM-DD: /{getline; getline n; print n; exit}' "$f"
+    grep -Eq '^<!-- *-->$' <<<"$output"                          # blank separator ends the key lines
   done
   grep -q 'superseded_by' _working-memory/decisionLog.md
   grep -q 'superseded_by' _working-memory/antipatterns.md
