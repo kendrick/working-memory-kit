@@ -1,6 +1,6 @@
 #!/bin/bash
-# Ensures activeContext.md exists at session start.
-# If missing, copies from the example template.
+# Session-start hook: ensures activeContext.md exists, and with --claude injects
+# its contents plus the AGENTS.md on-demand table into the model's context.
 
 set -eu
 
@@ -44,6 +44,8 @@ read_cfg() {
 }
 
 MAX_LINES="${WORKING_MEMORY_MAX_LINES:-$(read_cfg MAX_ACTIVE_CONTEXT_LINES 20)}"
+# A typo in the rc must not abort the hook under set -e; head -n rejects it.
+case "$MAX_LINES" in '' | *[!0-9]*) MAX_LINES=20 ;; esac
 
 # The directive lands every session, regardless of file state. The kit can't
 # enforce that the host tool auto-loaded AGENTS.md / CLAUDE.md at session
@@ -61,13 +63,15 @@ if [ ! -f "$WM_DIR/activeContext.md" ]; then
   else
     CONDITION=" Warning: no activeContext.example.md found; working memory may not be initialized."
   fi
-else
-  # The default limit (20) comes from activeContext.example.md. Past that,
-  # the file has stopped being a queue and started being an archive.
-  LINE_COUNT=$(grep -c '[^[:space:]]' "$WM_DIR/activeContext.md" || true)
-  if [ "${LINE_COUNT:-0}" -gt "$MAX_LINES" ]; then
-    CONDITION=" Warning: activeContext.md has $LINE_COUNT non-empty lines (limit is $MAX_LINES). Use the update-working-memory skill or the supplied update script to prune it."
-  fi
+fi
+
+# The default limit (20) comes from activeContext.example.md. Past that,
+# the file has stopped being a queue and started being an archive. An empty
+# CONDITION means the file already existed, so a fresh copy never warns.
+LINE_COUNT=0
+[ -f "$WM_DIR/activeContext.md" ] && LINE_COUNT=$(grep -c '[^[:space:]]' "$WM_DIR/activeContext.md" || true)
+if [ -z "$CONDITION" ] && [ "$LINE_COUNT" -gt "$MAX_LINES" ]; then
+  CONDITION=" Warning: activeContext.md has $LINE_COUNT non-empty lines (limit is $MAX_LINES). Use the update-working-memory skill or the supplied update script to prune it."
 fi
 
 # A raw quote, backslash, or control char makes the host drop the message
@@ -94,14 +98,13 @@ if [ "${1:-}" = "--claude" ]; then
   # goes to the model alone, so nothing waits on the agent choosing to read (#28).
   ACTIVE="$WM_DIR/activeContext.md"
   if [ -f "$ACTIVE" ]; then
-    msg="${msg}"$'\n\n'"Current _working-memory/activeContext.md:"$'\n'"$(grep '[^[:space:]]' "$ACTIVE" | head -n "$MAX_LINES")"
-    TOTAL=$(grep -c '[^[:space:]]' "$ACTIVE" || true)
-    if [ "${TOTAL:-0}" -gt "$MAX_LINES" ]; then
-      msg="${msg}"$'\n'"($((TOTAL - MAX_LINES)) more non-empty lines in activeContext.md; read the file for the rest.)"
+    msg="${msg}"$'\n\n'"Current _working-memory/activeContext.md:"$'\n'"$(tr -d '\r' < "$ACTIVE" | grep '[^[:space:]]' | head -n "$MAX_LINES")"
+    if [ "$LINE_COUNT" -gt "$MAX_LINES" ]; then
+      msg="${msg}"$'\n'"($((LINE_COUNT - MAX_LINES)) more non-empty lines in activeContext.md; read the file for the rest.)"
     fi
   fi
-  # Strip \r so a CRLF checkout doesn't reach the JSON as \u000d.
-  TABLE=$(awk '{ sub(/\r$/, "") } f && /^#/ { exit } f && /[^[:space:]]/ { print } $0 == "### Read on demand:" { f = 1 }' "$REPO_ROOT/AGENTS.md" 2>/dev/null || true)
+  # Strip \r (here and from activeContext.md above) so a CRLF checkout doesn't reach the JSON as \u000d.
+  TABLE=$(awk '{ sub(/\r$/, "") } in_table && /^#/ { exit } in_table && /[^[:space:]]/ { print } $0 == "### Read on demand:" { in_table = 1 }' "$REPO_ROOT/AGENTS.md" 2>/dev/null || true)
   if [ -n "$TABLE" ]; then
     msg="${msg}"$'\n\n'"On-demand reads, from AGENTS.md:"$'\n'"${TABLE}"
   fi

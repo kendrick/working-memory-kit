@@ -40,10 +40,12 @@ claude_ctx() {
   cp "$KIT_ROOT/template/AGENTS.md" AGENTS.md
   run claude_ctx
   [ "$status" -eq 0 ]
-  expected="$(awk '/^### Read on demand:/{f=1;next} f&&/^#/{exit} f&&/[^[:space:]]/' AGENTS.md)"
-  [[ "$expected" == "| File"* ]] || false
-  [[ "$expected" == *"| \`decisionLog.md\`"* ]] || false
-  [[ "$output" == *$'\n\nOn-demand reads, from AGENTS.md:\n'"$expected" ]] || false
+  # Literal rows, not a re-run of the hook's awk, so a change in the extraction rule fails.
+  [[ "$output" == *$'\n\nOn-demand reads, from AGENTS.md:\n| File                 | Read when...'* ]] || false
+  [[ "$output" == *$'\n| `projectOverview.md` | Before starting a feature, or onboarding to the codebase'* ]] || false
+  [[ "$output" == *"| \`antipatterns.md\`    | Before proposing a refactor, library swap, or architectural change; check whether it's been tried  |" ]] || false
+  table="${output#*"On-demand reads, from AGENTS.md:"$'\n'}"
+  [ "$(printf '%s\n' "$table" | wc -l)" -eq 8 ]
 }
 
 @test "the table stops at end of file and survives CRLF (#28)" {
@@ -77,4 +79,20 @@ claude_ctx() {
   [ "$status" -eq 0 ]
   directive="Working memory at _working-memory/ is active. AGENT INSTRUCTION: before deciding what to read, scan the on-demand table in AGENTS.md's '## Working Memory' section. If your task matches a row, that file is required reading before you proceed."
   [ "$output" = "{\"systemMessage\":\"$directive\"}" ]
+}
+
+@test "a non-numeric line limit falls back to 20 and still emits JSON (#28)" {
+  seq -f 'line %g' 1 25 > _working-memory/activeContext.md
+  WORKING_MEMORY_MAX_LINES=abc run claude_ctx
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Current _working-memory/activeContext.md:"* ]] || false
+  [[ "$output" == *"(limit is 20)"* ]] || false
+}
+
+@test "a CRLF activeContext.md reaches the model without carriage returns (#28)" {
+  printf 'a\r\nb\r\n' > _working-memory/activeContext.md
+  run claude_ctx
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'Current _working-memory/activeContext.md:\na\nb' ]] || false
+  [[ "$output" != *$'\r'* ]] || false
 }
