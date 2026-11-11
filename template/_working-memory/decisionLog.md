@@ -1,6 +1,6 @@
 # Decision Log
 
-Append-only; newest entry on top. Never edit a past entry's body. To mark an entry superseded, add `status: superseded` and `superseded_by:` lines directly under its heading.
+Append-only; newest entry on top. Never edit a past entry's body. To mark an entry superseded, set `status: superseded` and add `superseded_by:` directly under its heading.
 
 <!-- Format: -->
 <!-- ## YYYY-MM-DD: Short title -->

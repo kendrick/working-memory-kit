@@ -22,12 +22,12 @@ When this skill is activated, perform the following:
 | File | Update policy |
 |---|---|
 | `activeContext.md` | Queue, not archive. Evict completed items. ≤20 lines. |
-| `decisionLog.md` | Append only. Never edit a past entry's body. To mark an entry superseded, add `status: superseded` and `superseded_by:` lines directly under its heading. Most recent at top. |
+| `decisionLog.md` | Append only. Never edit a past entry's body. To mark an entry superseded, set `status: superseded` and add `superseded_by:` directly under its heading. Most recent at top. |
 | `projectOverview.md` | Update only when project shape changes (stack, structure). |
 | `dataContracts.md` | Update when interfaces, schemas, or API shapes change. |
 | `conventions.md` | Update when a new pattern emerges or an old one is deprecated. |
 | `openQuestions.md` | Remove answered questions (move answers to decision log). |
-| `antipatterns.md` | Append only. Never edit a past entry's body. To mark an entry superseded, add `status: superseded` and `superseded_by:` lines directly under its heading. Add an entry when an approach was tried and abandoned; include a specific "Don't suggest" line so future agents avoid re-proposing it. |
+| `antipatterns.md` | Append only. Never edit a past entry's body. To mark an entry superseded, set `status: superseded` and add `superseded_by:` directly under its heading. Add an entry when an approach was tried and abandoned; include a specific "Don't suggest" line so future agents avoid re-proposing it. |
 
 ## Entry headings
 
