@@ -114,6 +114,7 @@ The installer is the canonical setup. If your environment forbids piping `curl` 
 - `.claude/agents/` and `.claude/skills/` (read by both Claude Code and VS Code Copilot):
   - `working-memory-synchronizer` agent and `update-working-memory` skill—the **ongoing maintenance** surface.
   - `hydrator` agent and `hydrate-{discover,extract,draft,reconcile,propose}` skills—the **one-time onboarding** surface for brownfield installs.
+- `.claude/settings.json` with SessionStart and SessionEnd hooks that run the session scripts in Claude Code. If the file already exists, the installer adds the two hook entries and leaves every other setting and hook alone. If the file isn't valid JSON, the installer warns and leaves it untouched.
 - `.agents/skills/` (read by Codex): the same `update-working-memory` and `hydrate-*` skills, installed from the canonical `.claude` sources.
 - `.codex/agents/hydrator.toml` and `.codex/hooks.json` for Codex’s composite hydration workflow and lifecycle hooks.
 - `.github/hooks/working-memory-hooks.json` and `.github/instructions/working-memory.instructions.md.example` if your project uses GitHub Copilot (these formats are Copilot-specific; the `.example` is an inert sample you copy to `working-memory.instructions.md` to switch on)
@@ -269,7 +270,7 @@ working-memory-kit/
 ├── template/                # Files copied into the consumer's project
 │   ├── _working-memory/
 │   ├── AGENTS.md
-│   ├── .claude/{agents,skills}/
+│   ├── .claude/{agents,skills,settings.json}
 │   ├── .codex/{agents,hooks.json}
 │   ├── .github/{copilot-instructions.md,hooks,instructions}/
 │   ├── scripts/
