@@ -144,7 +144,7 @@ render_machinery() {
     printf '%s' "$src"
   else
     local tmp; tmp="$(mktemp)"
-    sed "s|_working-memory|$WM_DIR|g" "$src" > "$tmp"
+    sed "s|_working-memory|$WM_DIR_SED|g" "$src" > "$tmp"
     printf '%s' "$tmp"
   fi
 }
@@ -396,6 +396,19 @@ set_rc_key() {
   fi
 }
 
+# The rc can arrive in someone else's commit, so refuse a value that would write outside the repo or break out of a rendered hook.
+wm_dir_unsafe() {
+  case "$1" in
+    # Allow-list: the dir lands inside quoted strings in the rendered hook scripts.
+    *[!A-Za-z0-9._/\\-]*) return 0 ;;
+    /*|\\*|[A-Za-z]:*) return 0 ;;
+  esac
+  case "/${1//\\//}/" in
+    */../*) return 0 ;;
+  esac
+  return 1
+}
+
 # ---------- parse args ----------
 
 # --coexist-with <path> registers external spec tooling the registry doesn't know;
@@ -572,8 +585,14 @@ fi
 # Consumer can override at install time; on override, the installer
 # substitutes the literal token in copied template files.
 WM_DIR_DEFAULT="_working-memory"
-WM_DIR="$WM_DIR_DEFAULT"
-printf "Install working memory at %s/? [Y/n, or specify alternate path] " "$WM_DIR_DEFAULT"
+WM_DIR_RC="$(read_rc WORKING_MEMORY_DIR "")"
+WM_DIR_RC="${WM_DIR_RC%[/\\]}"
+if [ -n "$WM_DIR_RC" ] && wm_dir_unsafe "$WM_DIR_RC"; then
+  warn "ignoring WORKING_MEMORY_DIR=\"$WM_DIR_RC\" in .working-memoryrc: it must be a relative path inside the repo using only letters, digits, and . _ - / \\"
+  WM_DIR_RC=""
+fi
+WM_DIR="${WM_DIR_RC:-$WM_DIR_DEFAULT}"
+printf "Install working memory at %s/? [Y/n, or specify alternate path] " "$WM_DIR"
 prompt_read wm_reply
 # shellcheck disable=SC2154  # wm_reply is set indirectly by prompt_read
 case "$wm_reply" in
@@ -582,12 +601,14 @@ case "$wm_reply" in
     printf "Enter alternate path (relative to repo root): "
     prompt_read wm_custom
     if [ -n "$wm_custom" ]; then
-      WM_DIR="${wm_custom%/}"
+      WM_DIR="${wm_custom%[/\\]}"
     fi
     ;;
-  *) WM_DIR="${wm_reply%/}" ;;
+  *) WM_DIR="${wm_reply%[/\\]}" ;;
 esac
 info "working memory will be installed at $WM_DIR/"
+# A typed dir can still hold | or &, so escape it as a literal sed replacement.
+WM_DIR_SED="$(printf '%s' "$WM_DIR" | sed 's/[\\|&]/\\&/g')"
 
 # ---------- check existing structure ----------
 
@@ -633,6 +654,14 @@ if [ "$MODE" = "upgrade" ]; then info "upgrading..."; else info "scaffolding..."
 
 # ---------- working-memory ----------
 
+# A headless re-run can't prompt for the dir, so without this key it forks a second _working-memory/.
+if [ "$WM_DIR" != "$WM_DIR_DEFAULT" ] || [ -n "$WM_DIR_RC" ]; then
+  if wm_dir_unsafe "$WM_DIR"; then
+    warn "not saving WORKING_MEMORY_DIR=\"$WM_DIR\": a re-run only reuses a relative path inside the repo using only letters, digits, and . _ - / \\"
+  else
+    set_rc_key WORKING_MEMORY_DIR "\"$WM_DIR\""
+  fi
+fi
 mkdir -p "$TARGET_DIR/$WM_DIR"
 # The kit-authored README and the example are machinery (kit-owned, reconciled).
 # The six memory files are the user's content: seeded once, never overwritten.
@@ -903,7 +932,7 @@ if [ "$WM_DIR" != "$WM_DIR_DEFAULT" ]; then
       # path; script filenames use "working-memory-" (no underscore prefix),
       # env vars use WORKING_MEMORY_*, and the rc file is .working-memoryrc.
       # None collide.
-      sed -i.bak "s|_working-memory|$WM_DIR|g" "$full"
+      sed -i.bak "s|_working-memory|$WM_DIR_SED|g" "$full"
       rm -f "$full.bak"
     fi
   done

@@ -158,4 +158,78 @@ Describe 'installer' {
         '.github/instructions/working-memory.instructions.md.example' | Should -Exist
         @(Get-ChildItem .github/instructions -File | Where-Object { $_.Name -like '*.instructions.md' }).Count | Should -Be 0
     }
+
+    # ---- a custom working-memory dir persists in .working-memoryrc (#43). The
+    # prompts are unreachable headless, so these seed the rc to drive the read path. ----
+
+    It 'a seeded WORKING_MEMORY_DIR drives a headless install and re-run (#43)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="mem"'
+        Invoke-Installer | Out-Null
+        'mem/decisionLog.md' | Should -Exist
+        '_working-memory' | Should -Not -Exist
+        git add -A; git commit -q -m base
+        Invoke-Installer | Out-Null
+        '_working-memory' | Should -Not -Exist
+        Get-ChildItem -Recurse -Force -Filter '*.kitnew' | Should -BeNullOrEmpty
+        git status --porcelain | Should -BeNullOrEmpty
+    }
+
+    It 'deleting WORKING_MEMORY_DIR sends a headless re-run to _working-memory (#43)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="mem"'
+        Invoke-Installer | Out-Null
+        'mem/decisionLog.md' | Should -Exist
+        Set-Content .working-memoryrc ''
+        Invoke-Installer | Out-Null
+        '_working-memory' | Should -Exist
+    }
+
+    It 'an unrelated rc key change leaves the custom dir alone (#43)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="mem"'
+        Invoke-Installer | Out-Null
+        Add-Content .working-memoryrc 'NUDGE_FILE_THRESHOLD=9'
+        Invoke-Installer | Out-Null
+        '_working-memory' | Should -Not -Exist
+        Get-Content .working-memoryrc | Should -Contain 'WORKING_MEMORY_DIR="mem"'
+    }
+
+    It 'a default install writes no .working-memoryrc; an escaping rc dir is refused (#43)' {
+        Invoke-Installer | Out-Null
+        '.working-memoryrc' | Should -Not -Exist
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="../outside"'
+        Invoke-Installer | Should -Match 'WORKING_MEMORY_DIR'
+        '../outside' | Should -Not -Exist
+    }
+
+    It 'a rooted rc dir (leading backslash) is refused and the default is used (#43)' {
+        # pwsh resolves a backslash-rooted path from the filesystem root, so point at a
+        # writable sibling of the repo, which the installer would create if the refusal failed.
+        # Windows repos are drive-qualified, so strip the drive to keep the seed leading with a backslash.
+        $outside = "$repo-evil"
+        $rooted = ($outside -replace '/', '\') -replace '^[A-Za-z]:', ''
+        Set-Content .working-memoryrc ('WORKING_MEMORY_DIR="' + $rooted + '"')
+        Invoke-Installer | Should -Match 'ignoring WORKING_MEMORY_DIR='
+        '_working-memory/decisionLog.md' | Should -Exist
+        $outside | Should -Not -Exist
+    }
+
+    It 'a drive-letter rc dir is refused and the default is used (#43)' {
+        # Where $repo has a drive, seed a unique sibling so a stray dir on the runner can't fail the
+        # no-write assert. Without a drive, C:\evil can't exist, so the assert only bites on Windows.
+        $outside = 'C:\evil'
+        if ($repo -match '^[A-Za-z]:') { $outside = "$repo-evil2" -replace '/', '\' }
+        Set-Content .working-memoryrc ('WORKING_MEMORY_DIR="' + $outside + '"')
+        Invoke-Installer | Should -Match 'ignoring WORKING_MEMORY_DIR='
+        '_working-memory/decisionLog.md' | Should -Exist
+        $outside | Should -Not -Exist
+    }
+
+    It 'an rc dir outside the allow-list is refused before it reaches a hook (#49)' {
+        foreach ($dir in 'wm$&x', "x'+(New-Item PWNED)+'") {
+            Set-Content .working-memoryrc ('WORKING_MEMORY_DIR="' + $dir + '"')
+            Invoke-Installer | Should -Match 'using only letters, digits'
+            '_working-memory/decisionLog.md' | Should -Exist
+            Get-ChildItem -Recurse -Force -Filter PWNED | Should -BeNullOrEmpty
+            (Get-Content -Raw scripts/working-memory-session-start.ps1).Contains($dir) | Should -BeFalse
+        }
+    }
 }

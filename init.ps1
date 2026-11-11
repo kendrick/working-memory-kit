@@ -99,7 +99,7 @@ $KitnewSentinel = 'working-memory-kit: a newer version of this file shipped'
 function Get-RenderedMachinery ($src) {
     if ($WmDir -eq $WmDirDefault) { return $src }
     $tmp = [IO.Path]::GetTempFileName()
-    $content = ([IO.File]::ReadAllText($src)) -replace '_working-memory', $WmDir
+    $content = ([IO.File]::ReadAllText($src)).Replace('_working-memory', $WmDir)
     [IO.File]::WriteAllText($tmp, $content)
     return $tmp
 }
@@ -335,6 +335,12 @@ function Set-RcKey ($key, $value) {
     }
 }
 
+# The rc can arrive in someone else's commit, so refuse a value that would write outside the repo or break out of a rendered hook.
+function Test-WmDirUnsafe ($dir) {
+    # Allow-list: the dir lands inside quoted strings in the rendered hook scripts.
+    return ($dir -match '[^A-Za-z0-9._/\\-]') -or ($dir -match '^([\\/]|[A-Za-z]:)') -or (($dir -split '[\\/]') -contains '..')
+}
+
 # ---------- parse args ----------
 
 # --coexist-with <path> registers external spec tooling the registry doesn't know;
@@ -500,8 +506,13 @@ if ((-not $Neighbors) -and (-not $NoCoexist) -and ((Get-RcKey 'coexistence_asked
 # Consumer can override at install time; on override, the installer
 # substitutes the literal token in copied template files.
 $WmDirDefault = '_working-memory'
-$WmDir = $WmDirDefault
-$reply = Read-Prompt "Install working memory at $WmDirDefault/? [Y/n, or specify alternate path]"
+$wmDirRc = (Get-RcKey 'WORKING_MEMORY_DIR' '') -replace '[\\/]$', ''
+if ($wmDirRc -and (Test-WmDirUnsafe $wmDirRc)) {
+    Write-Warn "ignoring WORKING_MEMORY_DIR=`"$wmDirRc`" in .working-memoryrc: it must be a relative path inside the repo using only letters, digits, and . _ - / \"
+    $wmDirRc = ''
+}
+$WmDir = if ($wmDirRc) { $wmDirRc } else { $WmDirDefault }
+$reply = Read-Prompt "Install working memory at $WmDir/? [Y/n, or specify alternate path]"
 if ($reply -match '^(n|no)$') {
     $custom = Read-Prompt 'Enter alternate path (relative to repo root)'
     if ($custom) { $WmDir = $custom.TrimEnd('/').TrimEnd('\') }
@@ -549,6 +560,14 @@ if ($Mode -eq 'upgrade') { Write-Info 'upgrading...' } else { Write-Info 'scaffo
 
 # ---------- working-memory ----------
 
+# A headless re-run can't prompt for the dir, so without this key it forks a second _working-memory/.
+if (($WmDir -ne $WmDirDefault) -or $wmDirRc) {
+    if (Test-WmDirUnsafe $WmDir) {
+        Write-Warn "not saving WORKING_MEMORY_DIR=`"$WmDir`": a re-run only reuses a relative path inside the repo using only letters, digits, and . _ - / \"
+    } else {
+        Set-RcKey 'WORKING_MEMORY_DIR' "`"$WmDir`""
+    }
+}
 if (-not (Test-Path $WmDir)) { New-Item -ItemType Directory -Path $WmDir | Out-Null }
 # The kit-authored README and the example are machinery (kit-owned, reconciled).
 # The six memory files are the user's content: seeded once, never overwritten.
@@ -787,7 +806,7 @@ if ($WmDir -ne $WmDirDefault) {
             # closing quote in scripts, end of line. The token "_working-memory"
             # only ever appears as the install path; script filenames, env vars,
             # and .working-memoryrc do not collide.
-            $content = $content -replace '_working-memory', $WmDir
+            $content = $content.Replace('_working-memory', $WmDir)
             Set-Content -Path $full -Value $content -NoNewline
         }
     }

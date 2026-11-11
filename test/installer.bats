@@ -182,10 +182,101 @@ teardown() { teardown_repo; }
 @test "a custom working-memory dir re-runs clean" {
   run_installer_tty $'mem\n'                     # fresh install into mem/
   [ -d mem ]
+  grep -qx 'WORKING_MEMORY_DIR="mem"' .working-memoryrc
   git add -A; git commit -q -m base
   run_installer_tty $'mem\nu\n'                  # re-run, choose Upgrade
   run git status --porcelain
   [ -z "$output" ]
   run find . -name '*.kitnew'
   [ -z "$output" ]
+  run_installer                                  # headless re-run (#43)
+  [ ! -d _working-memory ]
+  [ "$(grep -c '_working-memory' AGENTS.md)" -eq 0 ]
+  run git status --porcelain; [ -z "$output" ]
+  run find . -name '*.kitnew'; [ -z "$output" ]
+}
+
+@test "deleting WORKING_MEMORY_DIR sends a headless re-run to _working-memory (#43)" {
+  run_installer_tty $'mem\n'
+  grep -qx 'WORKING_MEMORY_DIR="mem"' .working-memoryrc
+  perl -i -ne 'print unless /^WORKING_MEMORY_DIR=/' .working-memoryrc
+  run_installer
+  [ -d _working-memory ]
+}
+
+@test "an unrelated rc key change leaves the custom dir alone (#43)" {
+  run_installer_tty $'mem\n'
+  printf 'NUDGE_FILE_THRESHOLD=9\n' >> .working-memoryrc
+  git add -A; git commit -q -m base
+  run_installer
+  [ ! -d _working-memory ]
+  grep -qx 'WORKING_MEMORY_DIR="mem"' .working-memoryrc
+  run git status --porcelain; [ -z "$output" ]
+}
+
+@test "a default install writes no .working-memoryrc; an escaping rc dir is refused (#43)" {
+  run_installer
+  [ ! -f .working-memoryrc ]
+  printf 'WORKING_MEMORY_DIR="../outside"\n' > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q 'WORKING_MEMORY_DIR'
+  [ ! -d ../outside ]
+}
+
+@test "an absolute rc dir is refused and nothing is created there (#43)" {
+  printf 'WORKING_MEMORY_DIR="%s"\n' "$BATS_TEST_TMPDIR/abs" > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF "ignoring WORKING_MEMORY_DIR=\"$BATS_TEST_TMPDIR/abs\" in .working-memoryrc: it must be a relative path inside the repo"
+  [ ! -e "$BATS_TEST_TMPDIR/abs" ]
+  [ -d _working-memory ]
+}
+
+@test "a drive-letter or backslash-escaping rc dir is refused (#43)" {
+  printf 'WORKING_MEMORY_DIR="C:/x"\n' > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF 'ignoring WORKING_MEMORY_DIR="C:/x" in .working-memoryrc: it must be a relative path inside the repo'
+  [ ! -e C: ]
+  printf 'WORKING_MEMORY_DIR="..\\x"\n' > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF 'ignoring WORKING_MEMORY_DIR="..\x" in .working-memoryrc: it must be a relative path inside the repo'
+  [ ! -e '..\x' ]
+}
+
+@test "a prompt answer outside the repo is used but not saved (#43)" {
+  # Install from a subdir so ../sib stays inside TESTDIR and teardown removes it.
+  mkdir repo && cd repo && git init -q
+  run run_installer_tty $'n\n../sib\n'
+  [ -d ../sib ]
+  echo "$output" | grep -qF 'not saving WORKING_MEMORY_DIR="../sib": a re-run only reuses a relative path inside the repo using only letters, digits, and . _ - / \'
+  run grep -q '^WORKING_MEMORY_DIR=' .working-memoryrc
+  [ "$status" -ne 0 ]
+}
+
+@test "an rc dir outside the allow-list is refused before it reaches a hook (#49)" {
+  printf 'WORKING_MEMORY_DIR="x$(touch PWNED)"\n' > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF 'ignoring WORKING_MEMORY_DIR="x$(touch PWNED)" in .working-memoryrc: it must be a relative path inside the repo using only letters, digits, and . _ - / \'
+  [ -d _working-memory ]
+  run find . -name PWNED; [ -z "$output" ]
+  run grep -rlF 'x$(touch' scripts; [ -z "$output" ]
+}
+
+@test "a typed dir with sed metacharacters can't inject a sed command (#49)" {
+  run run_installer_tty $'x|g;1e touch PWNED;#\n'
+  echo "$output" | grep -qF 'not saving WORKING_MEMORY_DIR="x|g;1e touch PWNED;#"'
+  # GNU sed would run `e touch PWNED` unescaped; BSD sed has no `e`, so the render assert bites there.
+  run find . -name PWNED; [ -z "$output" ]
+  grep -qF 'x|g;1e touch PWNED;#/activeContext.md' '.claude/skills/update-working-memory/SKILL.md'
+  grep -qF 'x|g;1e touch PWNED;#/' AGENTS.md
+}
+
+@test "a typed dir with & and a backslash renders literally (#49)" {
+  run_installer_tty $'a&b\\c\n'
+  grep -qF 'a&b\c/activeContext.md' '.claude/skills/update-working-memory/SKILL.md'
+  grep -qF 'a&b\c/' AGENTS.md
 }

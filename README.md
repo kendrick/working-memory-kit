@@ -194,6 +194,8 @@ Two named presets ship in `.working-memoryrc.example`:
 - **strict** (15 / 3 / 100): early-stage projects iterating on architecture.
 - **loose** (40 / 10 / 500): mature codebases with mostly incremental work.
 
+A custom dir picked at install is saved to `.working-memoryrc` as `WORKING_MEMORY_DIR`, so commit that file and re-runs, headless ones included, reuse that dir. Only a relative dir made of letters, digits, and `. _ - / \` is saved and reused.
+
 ## Why these defaults
 
 Twenty lines is the cap because past that, `activeContext.md` has stopped being a queue and could have started being an archive. The point of the file is to be cheap to read and cheap to refresh. If your current focus needs more than twenty lines to describe, working memory itself may be doing the wrong job.
