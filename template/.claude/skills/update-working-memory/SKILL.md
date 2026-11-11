@@ -28,3 +28,7 @@ When this skill is activated, perform the following:
 | `conventions.md` | Update when a new pattern emerges or an old one is deprecated. |
 | `openQuestions.md` | Remove answered questions (move answers to decision log). |
 | `antipatterns.md` | Append only. Add an entry when an approach was tried and abandoned — include a specific "Don't suggest" line so future agents avoid re-proposing it. |
+
+## Entry headings
+
+Start each entry in `decisionLog.md` and `antipatterns.md` with `## YYYY-MM-DD: Title`: ISO date, colon, space, title, no brackets. For example, `## 2026-10-01: Cap retries at three per request`. `ltm promote --entry` (from the [long-term-memory-kit](https://github.com/kendrick/long-term-memory-kit)) matches a bare title only on this shape.

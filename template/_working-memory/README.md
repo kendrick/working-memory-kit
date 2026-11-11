@@ -19,7 +19,8 @@ A two-tier working memory for this project. AI coding agents read these files fo
 
 - After completing a feature or making a meaningful decision, update `activeContext.md` and the relevant on-demand file.
 - `activeContext.md` is a queue, not an archive. Evict completed items to `decisionLog.md` so the file stays under twenty lines.
-- `decisionLog.md` and `antipatterns.md` are append-only. Never edit past entries — add a new entry that supersedes the old one.
+- `decisionLog.md` and `antipatterns.md` are append-only. Never edit past entries, except to retitle an old heading to the current shape; otherwise add a new entry that supersedes the old one.
+- Both logs head each entry `## YYYY-MM-DD: Title`. Older `antipatterns.md` entries written as `## YYYY-MM-DD — [Title]` still read fine; to promote one with `ltm promote` (the CLI of the [long-term-memory-kit](https://github.com/kendrick/long-term-memory-kit)), retitle it by hand to the new shape first.
 - `projectOverview.md`, `dataContracts.md`, and `conventions.md` update when the project's _shape_ changes (new layer, new type, new pattern), not on every feature.
 
 Agents follow the same rules. The full on-demand table lives in [`../AGENTS.md`](../AGENTS.md).

@@ -5,7 +5,7 @@
 <!-- decisionLog.md.                                                            -->
 <!--                                                                            -->
 <!-- Format: -->
-<!-- ## YYYY-MM-DD — [Short title in imperative voice — what to avoid]         -->
+<!-- ## YYYY-MM-DD: Short title in imperative voice, naming what to avoid       -->
 <!-- **Tried:** What was attempted                                              -->
 <!-- **What broke:** Observed failure mode                                      -->
 <!-- **Why we backed out:** Root cause if known; otherwise the observed pain    -->
