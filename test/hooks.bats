@@ -329,6 +329,17 @@ $(promote_line 'Drop the v1 API')"
   [ -z "$output" ]
 }
 
+@test "a heading whose only change is case reads as new (#33)" {
+  ltm_setup
+  printf '## 2026-11-01: Cap Retries\n' > _working-memory/decisionLog.md
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: cap retries\n' > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "$(promote_line 'cap retries')" ]
+}
+
 @test "the promote line keeps the JSON valid with a quote in the title (#33)" {
   ltm_setup
   commit_base

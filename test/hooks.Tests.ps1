@@ -134,6 +134,23 @@ Describe 'session-end hook' {
             "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
         }
 
+        It 'a heading whose only change is case reads as new (#33)' {
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap Retries`n"
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: cap retries`n"
+            (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage | Should -BeExactly (Get-PromoteLine 'cap retries')
+        }
+
+        # Passes on pwsh 7 regardless; guards 5.1, where git show is decoded with the OEM code page.
+        It 'a non-ASCII heading with a body-only edit prints nothing (#33)' {
+            Set-Content '_working-memory/decisionLog.md' "# Decision Log`n`n## 2026-10-01: Caf$([char]0xE9) policy`n`nbody`n" -Encoding UTF8
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Add-Content '_working-memory/decisionLog.md' 'more body' -Encoding UTF8
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
         It 'the promote line keeps the JSON valid with a quote in the title (#33)' {
             git add -A; git commit -q -m base
             & $start | Out-Null
@@ -151,7 +168,7 @@ Describe 'session-end hook' {
             git add -A
             $lines = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage -split "`n"
             $lines.Count | Should -Be 2
-            $lines[0] | Should -Match '^You changed .* this session\. .*update-working-memory'
+            $lines[0] | Should -BeExactly 'You changed 3 files and 4 lines this session. Use the update-working-memory skill or the supplied update script to keep working memory current.'
             $lines[1] | Should -BeExactly (Get-PromoteLine 'Cap retries at three per request')
         }
     }

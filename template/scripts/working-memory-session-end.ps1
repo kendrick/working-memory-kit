@@ -126,11 +126,21 @@ if ((Test-Path (Join-Path $repoRoot '.ltm.yaml')) -and (Test-Path $logFile)) {
     $then = ''
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    try { $then = (@(git -C $repoRoot show "${base}:$logRel" 2>$null) -join "`n") } finally { $ErrorActionPreference = $prevEap }
-    $heading = '^## (.*)$'
-    $old = @(($then -split "`n") | ForEach-Object { $_.TrimEnd("`r") } | Where-Object { $_ -match $heading })
-    foreach ($h in (($now -split "`n") | ForEach-Object { $_.TrimEnd("`r") } | Where-Object { $_ -match $heading })) {
-        if ($old -contains $h) { continue }
+    # 5.1 decodes native output with the console's OEM code page while $now is
+    # UTF-8, so a non-ASCII heading would differ from itself and read as new
+    # every session. The set can throw with no console; then keep the default.
+    $prevEnc = $null
+    try { $prevEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
+    try { $then = (@(git -C $repoRoot show "${base}:$logRel" 2>$null) -join "`n") } finally {
+        $ErrorActionPreference = $prevEap
+        if ($prevEnc) { try { [Console]::OutputEncoding = $prevEnc } catch {} }
+    }
+    $heading = '^## '
+    # Case-sensitive (-c*) to match the bash twin's grep -qxF; PowerShell's
+    # default operators ignore case, so a recased heading would go unnoticed.
+    $old = @(($then -split "`n") | ForEach-Object { $_ -replace "`r", '' } | Where-Object { $_ -cmatch $heading })
+    foreach ($h in (($now -split "`n") | ForEach-Object { $_ -replace "`r", '' } | Where-Object { $_ -cmatch $heading })) {
+        if ($old -ccontains $h) { continue }
         $title = if ($h -match '^## \d{4}-\d{2}-\d{2}: (.+)$') { $Matches[1] } else { $h.Substring(3) }
         $promote += "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote $logRel --entry `"$title`""
     }
@@ -138,13 +148,13 @@ if ((Test-Path (Join-Path $repoRoot '.ltm.yaml')) -and (Test-Path $logFile)) {
 
 $msg = $null
 if ($reason) {
-    # A quote or backslash in a pointer must reach the host escaped, or the
-    # host drops the message silently.
     $msg = "You changed $reason this session.$extra Use the update-working-memory skill or the supplied update script to keep working memory current."
 }
 if ($promote.Count -gt 0) {
     $msg = (@($msg) + $promote | Where-Object { $_ }) -join "`n"
 }
 if ($msg) {
+    # A quote or backslash in a pointer or title must reach the host escaped, or
+    # the host drops the message silently.
     Write-Output ([pscustomobject]@{ systemMessage = $msg } | ConvertTo-Json -Compress)
 }
