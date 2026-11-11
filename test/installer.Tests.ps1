@@ -294,11 +294,11 @@ Describe 'installer' {
 
     It 'fresh install: no template example reads as a dated log entry (#37)' {
         Invoke-Installer | Out-Null
+        Select-String -Path '_working-memory/*.md' -Pattern '^## \d{4}-' | Should -BeNullOrEmpty
         $logs = '_working-memory/decisionLog.md', '_working-memory/antipatterns.md'
-        Select-String -Path $logs -Pattern '^## \d{4}-' | Should -BeNullOrEmpty
         foreach ($log in $logs) {
             Select-String -Path $log -Pattern '^<!-- ## YYYY-MM-DD: ' | Should -Not -BeNullOrEmpty
         }
-        Get-Content _working-memory/antipatterns.md -Raw | Should -Not -Match '—'
+        Get-Content _working-memory/antipatterns.md -Raw | Should -Not -Match ([char]0x2014)
     }
 }

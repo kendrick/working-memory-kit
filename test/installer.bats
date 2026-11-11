@@ -348,7 +348,7 @@ teardown() { teardown_repo; }
 
 @test "fresh install: no template example reads as a dated log entry (#37)" {
   run_installer
-  run grep -E '^## [0-9]{4}-' _working-memory/decisionLog.md _working-memory/antipatterns.md
+  run grep -E '^## [0-9]{4}-' _working-memory/*.md
   [ "$status" -eq 1 ]                                              # no match at all
   grep -q '^<!-- ## YYYY-MM-DD: ' _working-memory/decisionLog.md   # example kept, commented
   grep -q '^<!-- ## YYYY-MM-DD: ' _working-memory/antipatterns.md

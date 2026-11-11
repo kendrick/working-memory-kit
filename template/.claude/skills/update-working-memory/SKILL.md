@@ -31,4 +31,4 @@ When this skill is activated, perform the following:
 
 ## Entry headings
 
-Start each entry in `decisionLog.md` and `antipatterns.md` with `## YYYY-MM-DD: Title`: ISO date, colon, space, title, no brackets. For example, `## 2026-10-01: Cap retries at three per request`. `ltm promote --entry` matches a bare title only on this shape.
+Start each entry in `decisionLog.md` and `antipatterns.md` with `## YYYY-MM-DD: Title`: ISO date, colon, space, title, no brackets. For example, `## 2026-10-01: Cap retries at three per request`. `ltm promote --entry` (from the [long-term-memory-kit](https://github.com/kendrick/long-term-memory-kit)) matches a bare title only on this shape.
