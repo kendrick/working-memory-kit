@@ -269,4 +269,18 @@ Describe 'installer' {
         Invoke-Installer | Should -Match ([regex]::Escape(' is not valid JSON (or not the settings shape Claude Code reads); left it as-is. Fix it and re-run to get the working-memory hooks.'))
         (Get-FileHash .claude/settings.json).Hash | Should -Be $before
     }
+
+    It 're-install swaps an old kit entry for the current one and drops its duplicate (#36)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"echo mine"},{"type":"command","command":"bash scripts/working-memory-session-start.sh","timeout":5}]},{"hooks":[{"type":"command","command":"bash scripts/working-memory-session-start.sh"}]}]}}'
+        Invoke-Installer | Out-Null
+        Get-HookCount 'SessionStart' 'echo mine' | Should -Be 1
+        Get-HookCount 'SessionStart' 'working-memory-session-start.sh' | Should -Be 1
+        $groups = @((Get-Content .claude/settings.json -Raw | ConvertFrom-Json).hooks.SessionStart)
+        $kit = (Get-Content (Join-Path $KitRoot 'template/.claude/settings.json') -Raw | ConvertFrom-Json).hooks.SessionStart[0].hooks[0]
+        $groups.Count | Should -Be 1
+        $groups[0].matcher | Should -Be 'startup'
+        $groups[0].hooks[1].command | Should -Be $kit.command
+        $groups[0].hooks[1].timeout | Should -Be $kit.timeout
+    }
 }

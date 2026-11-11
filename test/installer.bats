@@ -4,8 +4,7 @@
 
 load helpers
 
-# Count the hooks under one .claude/settings.json event whose command contains
-# a fragment. Exits 2 if the event isn't an array, so a shape regression fails loudly.
+# Exits 2 if the event isn't an array, so a shape regression fails loudly.
 count_hook() {
   node -e '
     const s = require(process.cwd() + "/.claude/settings.json");
@@ -321,4 +320,20 @@ teardown() { teardown_repo; }
   [ "$status" -eq 0 ]
   echo "$output" | grep -q 'not valid JSON'
   cmp .claude/settings.json "$BATS_TEST_TMPDIR/orig"
+}
+
+@test "re-install swaps an old kit entry for the current one and drops its duplicate (#36)" {
+  mkdir -p .claude
+  printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"echo mine"},{"type":"command","command":"bash scripts/working-memory-session-start.sh","timeout":5}]},{"hooks":[{"type":"command","command":"bash scripts/working-memory-session-start.sh"}]}]}}' > .claude/settings.json
+  run_installer
+  [ "$(count_hook SessionStart 'echo mine')" -eq 1 ]
+  [ "$(count_hook SessionStart working-memory-session-start.sh)" -eq 1 ]
+  node -e '
+    const s = require(process.cwd() + "/.claude/settings.json");
+    const t = require(process.argv[1]);
+    const g = s.hooks.SessionStart;
+    if (g.length !== 1 || g[0].matcher !== "startup") process.exit(1);
+    const h = g[0].hooks[1], k = t.hooks.SessionStart[0].hooks[0];
+    if (h.command !== k.command || h.timeout !== k.timeout) process.exit(1);
+  ' "$KIT_ROOT/template/.claude/settings.json"
 }
