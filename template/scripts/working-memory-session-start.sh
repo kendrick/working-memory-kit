@@ -89,6 +89,22 @@ json_escape() {
 # passes it to the model; context there goes in via additionalContext.
 msg="${DIRECTIVE}${CONDITION}"
 if [ "${1:-}" = "--claude" ]; then
+  # Only Claude Code gets the contents, because Copilot and Codex print
+  # systemMessage on screen, where a dump of the file is noise. additionalContext
+  # goes to the model alone, so nothing waits on the agent choosing to read (#28).
+  ACTIVE="$WM_DIR/activeContext.md"
+  if [ -f "$ACTIVE" ]; then
+    msg="${msg}"$'\n\n'"Current _working-memory/activeContext.md:"$'\n'"$(grep '[^[:space:]]' "$ACTIVE" | head -n "$MAX_LINES")"
+    TOTAL=$(grep -c '[^[:space:]]' "$ACTIVE" || true)
+    if [ "${TOTAL:-0}" -gt "$MAX_LINES" ]; then
+      msg="${msg}"$'\n'"($((TOTAL - MAX_LINES)) more non-empty lines in activeContext.md; read the file for the rest.)"
+    fi
+  fi
+  # Strip \r so a CRLF checkout doesn't reach the JSON as \u000d.
+  TABLE=$(awk '{ sub(/\r$/, "") } f && /^#/ { exit } f && /[^[:space:]]/ { print } $0 == "### Read on demand:" { f = 1 }' "$REPO_ROOT/AGENTS.md" 2>/dev/null || true)
+  if [ -n "$TABLE" ]; then
+    msg="${msg}"$'\n\n'"On-demand reads, from AGENTS.md:"$'\n'"${TABLE}"
+  fi
   printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "$msg")"
 else
   printf '{"systemMessage":"%s"}\n' "$(json_escape "$msg")"
