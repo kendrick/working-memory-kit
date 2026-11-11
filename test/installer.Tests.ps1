@@ -301,4 +301,15 @@ Describe 'installer' {
         }
         Get-Content _working-memory/antipatterns.md -Raw | Should -Not -Match ([char]0x2014)
     }
+
+    It 'fresh install: both log templates show a status line directly under the example heading (#39)' {
+        Invoke-Installer | Out-Null
+        foreach ($log in '_working-memory/decisionLog.md', '_working-memory/antipatterns.md') {
+            $lines = Get-Content $log
+            $i = 0..($lines.Count - 1) | Where-Object { $lines[$_] -match '^<!-- ## YYYY-MM-DD: ' } | Select-Object -First 1
+            $lines[$i + 1] | Should -Be '<!-- status: accepted -->'
+            Get-Content $log -Raw | Should -Match 'superseded_by'
+        }
+        Get-Content AGENTS.md -Raw | Should -Match 'status: superseded'
+    }
 }

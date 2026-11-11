@@ -354,3 +354,14 @@ teardown() { teardown_repo; }
   grep -q '^<!-- ## YYYY-MM-DD: ' _working-memory/antipatterns.md
   ! grep -q '—' _working-memory/antipatterns.md                    # no em dash left in the format
 }
+
+@test "fresh install: both log templates show a status line directly under the example heading (#39)" {
+  run_installer
+  for f in _working-memory/decisionLog.md _working-memory/antipatterns.md; do
+    run awk '/^<!-- ## YYYY-MM-DD: /{getline n; print n; exit}' "$f"
+    [ "$output" = "<!-- status: accepted -->" ]
+  done
+  grep -q 'superseded_by' _working-memory/decisionLog.md
+  grep -q 'superseded_by' _working-memory/antipatterns.md
+  grep -q 'status: superseded' AGENTS.md                           # the carve-out reached the fenced section
+}
