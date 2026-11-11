@@ -6,9 +6,9 @@ Run the five-phase working-memory hydration pipeline: discover, extract, draft, 
 1. Confirm the target project root, whether the project is greenfield or brownfield, the state of the working-memory files, and the source material in scope.
 2. Use hydrate-discover to inventory source locations. Show the inventory before continuing.
 3. Use hydrate-extract to gather one-sentence findings with source provenance.
-4. Use hydrate-draft to map findings into the working-memory files.
+4. Use hydrate-draft to map repo-scope findings into the working-memory files.
 5. Use hydrate-reconcile to mark drafts as net-new, would-overwrite, or conflicts-with-code.
-6. Use hydrate-propose to stage drafts as a commit, or a pull request for multi-developer projects. Stop for human review.
+6. Use hydrate-propose to stage drafts as a commit, or a pull request for multi-developer projects. For org-scope findings it prints an ltm propose command each when .ltm.yaml exists, otherwise adds each to openQuestions.md, and runs none of them. Stop for human review.
 
 Never auto-merge phase output. Never write activeContext.md. Never fabricate findings. When existing working-memory content conflicts with the code, raise the conflict instead of choosing a winner.
 """
