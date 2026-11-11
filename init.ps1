@@ -287,7 +287,7 @@ function Merge-ClaudeHooks ($src, $dst) {
         foreach ($sg in $kitEvent.Value) {
             foreach ($kit in $sg.hooks) {
                 if ("$($kit.command)" -notmatch '(working-memory-session-(start|end))\.') { throw "no script in kit hook: $($kit.command)" }
-                $pattern = [regex]::Escape($Matches[1]) + '\.'
+                $pattern = '(?<![\w-])' + [regex]::Escape($Matches[1]) + '\.'
                 $found = $false
                 $keptGroups = @()
                 foreach ($g in $groups) {

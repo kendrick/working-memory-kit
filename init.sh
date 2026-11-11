@@ -318,7 +318,7 @@ for my $event (sort keys %{ $src->{hooks} }) {
             for my $g (@$groups) {
                 my @kept;
                 for my $h (@{ $g->{hooks} || [] }) {
-                    if (ref $h eq "HASH" && ($h->{command} // "") =~ /\Q$key\E\./) {
+                    if (ref $h eq "HASH" && ($h->{command} // "") =~ /(?<![\w-])\Q$key\E\./) {
                         next if $found++;
                         $h = $kit;
                     }

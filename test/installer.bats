@@ -337,3 +337,11 @@ teardown() { teardown_repo; }
     if (h.command !== k.command || h.timeout !== k.timeout) process.exit(1);
   ' "$KIT_ROOT/template/.claude/settings.json"
 }
+
+@test "re-install keeps a user hook whose script name only ends in the kit's (#36)" {
+  mkdir -p .claude
+  printf '%s\n' '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash scripts/my-working-memory-session-start.sh"}]}]}}' > .claude/settings.json
+  run_installer
+  [ "$(count_hook SessionStart my-working-memory-session-start.sh)" -eq 1 ]
+  [ "$(count_hook SessionStart 'CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh')" -eq 1 ]
+}

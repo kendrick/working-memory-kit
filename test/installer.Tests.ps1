@@ -283,4 +283,12 @@ Describe 'installer' {
         $groups[0].hooks[1].command | Should -Be $kit.command
         $groups[0].hooks[1].timeout | Should -Be $kit.timeout
     }
+
+    It 're-install keeps a user hook whose script name only ends in the kit''s (#36)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash scripts/my-working-memory-session-start.sh"}]}]}}'
+        Invoke-Installer | Out-Null
+        Get-HookCount 'SessionStart' 'my-working-memory-session-start.sh' | Should -Be 1
+        Get-HookCount 'SessionStart' 'CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh' | Should -Be 1
+    }
 }
