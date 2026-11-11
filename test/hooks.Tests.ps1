@@ -156,7 +156,41 @@ Describe 'session-end hook' {
             & $start | Out-Null
             Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Use `"at most once`" delivery`n"
             $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
-            $msg | Should -BeExactly (Get-PromoteLine 'Use "at most once" delivery')
+            # --entry is single-quoted because the title holds a double quote.
+            $msg | Should -BeExactly 'working-memory: new decisionLog entry "Use "at most once" delivery". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry ''Use "at most once" delivery'''
+        }
+
+        It 'a title with shell expansion syntax prints a single-quoted entry (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' '## 2026-11-01: Keep $HOME private'
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            $msg | Should -BeExactly 'working-memory: new decisionLog entry "Keep $HOME private". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry ''Keep $HOME private'''
+            function ltm { $args[3] }
+            Invoke-Expression ($msg -replace '^.*If it applies beyond this repo: ', '') | Should -BeExactly 'Keep $HOME private'
+        }
+
+        It 'a title with an apostrophe and a dollar sign round-trips (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' '## 2026-11-01: Don''t expand $HOME'
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            $msg | Should -BeExactly 'working-memory: new decisionLog entry "Don''t expand $HOME". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry ''Don''''t expand $HOME'''
+            function ltm { $args[3] }
+            Invoke-Expression ($msg -replace '^.*If it applies beyond this repo: ', '') | Should -BeExactly 'Don''t expand $HOME'
+        }
+
+        It 'a title with curly quotes round-trips (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            # Curly quotes are PowerShell quote delimiters; built from code points to keep this file ASCII.
+            $apos = [char]0x2019; $lq = [char]0x201C; $rq = [char]0x201D
+            $title = "It${apos}s ${lq}`$x${rq}"
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: $title"
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            $msg | Should -BeExactly "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'It${apos}${apos}s ${lq}`$x${rq}'"
+            function ltm { $args[3] }
+            Invoke-Expression ($msg -replace '^.*If it applies beyond this repo: ', '') | Should -BeExactly $title
         }
 
         It 'the promote line follows the size nudge when both fire (#33)' {

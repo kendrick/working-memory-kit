@@ -347,7 +347,48 @@ $(promote_line 'Drop the v1 API')"
   printf '## 2026-11-01: Use "at most once" delivery\n' > _working-memory/decisionLog.md
   run bash "$HOOK"
   [ "$status" -eq 0 ]
-  [ "$(sysmsg)" = "$(promote_line 'Use "at most once" delivery')" ]
+  # --entry is single-quoted because the title holds a double quote.
+  [ "$(sysmsg)" = "working-memory: new decisionLog entry \"Use \"at most once\" delivery\". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'Use \"at most once\" delivery'" ]
+}
+
+# Evals the printed command with a stub ltm; prints the title argument ltm would receive.
+roundtrip_entry() {
+  local cmd
+  cmd="$(sysmsg | sed 's/^.*If it applies beyond this repo: //')"
+  ltm() { printf '%s' "$4"; }
+  eval "$cmd"
+}
+
+@test "a title with shell expansion syntax prints a single-quoted entry (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Keep $HOME private\n' > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "working-memory: new decisionLog entry \"Keep \$HOME private\". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'Keep \$HOME private'" ]
+  [ "$(roundtrip_entry)" = 'Keep $HOME private' ]
+}
+
+@test "a title with an apostrophe and a dollar sign round-trips (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf "## 2026-11-01: Don't expand \$HOME\n" > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "working-memory: new decisionLog entry \"Don't expand \$HOME\". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'Don'\\''t expand \$HOME'" ]
+  [ "$(roundtrip_entry)" = "Don't expand \$HOME" ]
+}
+
+@test "a title with a backslash and a bang round-trips (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Use C:\\tmp\\new, not Foo!\n' > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(roundtrip_entry)" = 'Use C:\tmp\new, not Foo!' ]
 }
 
 @test "the promote line follows the size nudge when both fire (#33)" {

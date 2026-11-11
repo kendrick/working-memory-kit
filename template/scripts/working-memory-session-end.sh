@@ -135,7 +135,15 @@ if [ -f "$REPO_ROOT/.ltm.yaml" ] && [ -f "$DL_FILE" ]; then
     else
       title="${line#\#\# }"
     fi
-    PROMOTE="${PROMOTE}${PROMOTE:+$'\n'}working-memory: new decisionLog entry \"$title\". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry \"$title\""
+    # The printed command gets pasted into a shell: a title with expansion
+    # syntax must reach ltm literally, so it goes single-quoted.
+    # Quote chars live in variables: bash 3.2 and 5 disagree on quoting inside ${//}.
+    sq="'"; sq_esc="'\\''"
+    case $title in
+      *[\"\$\`\\!]*) entry="'${title//$sq/$sq_esc}'" ;;
+      *) entry="\"$title\"" ;;
+    esac
+    PROMOTE="${PROMOTE}${PROMOTE:+$'\n'}working-memory: new decisionLog entry \"$title\". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry $entry"
   done < <(tr -d '\r' < "$DL_FILE" | grep '^## ' || true)
 fi
 

@@ -142,7 +142,13 @@ if ((Test-Path (Join-Path $repoRoot '.ltm.yaml')) -and (Test-Path $logFile)) {
     foreach ($h in (($now -split "`n") | ForEach-Object { $_ -replace "`r", '' } | Where-Object { $_ -cmatch $heading })) {
         if ($old -ccontains $h) { continue }
         $title = if ($h -match '^## \d{4}-\d{2}-\d{2}: (.+)$') { $Matches[1] } else { $h.Substring(3) }
-        $promote += "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote $logRel --entry `"$title`""
+        # The printed command gets pasted into a shell: a title with expansion
+        # syntax must reach ltm literally, so it goes single-quoted. The trigger
+        # set differs from bash's: `\` and `!` are literal inside PowerShell double
+        # quotes, while curly quotes are PowerShell quote delimiters. Escapes keep
+        # this file ASCII for Windows PowerShell 5.1 reading it as ANSI.
+        $entry = if ($title -match '["$`\u201C\u201D\u201E]') { "'" + ($title -replace "['\u2018\u2019\u201A\u201B]", '$0$0') + "'" } else { "`"$title`"" }
+        $promote += "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote $logRel --entry $entry"
     }
 }
 
