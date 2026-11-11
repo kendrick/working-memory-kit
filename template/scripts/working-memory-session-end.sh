@@ -37,7 +37,19 @@ fi
 #   " 5 files changed, 200 insertions(+), 50 deletions(-)"
 # LC_ALL=C pins the shortstat output to English so the regexes below stay
 # valid under non-default locales.
-DIFF_STATS=$(LC_ALL=C git -C "$REPO_ROOT" diff --shortstat HEAD 2>/dev/null || true)
+# Diff against the commit session-start recorded, not HEAD: a commit-as-you-go
+# session ends with a clean tree, so `diff HEAD` reads zero (#35). The .ps1
+# start writes no trailing newline, hence the `|| [ -n ]`. A missing or gc'd
+# base falls back to HEAD.
+BASE=HEAD
+if [ -n "$GIT_DIR" ] && [ -f "$GIT_DIR/working-memory-session-base" ]; then
+  IFS= read -r SAVED < "$GIT_DIR/working-memory-session-base" || [ -n "$SAVED" ] || true
+  SAVED="${SAVED:-}"
+  if [ -n "$SAVED" ] && git -C "$REPO_ROOT" cat-file -e "${SAVED}^{commit}" 2>/dev/null; then
+    BASE="$SAVED"
+  fi
+fi
+DIFF_STATS=$(LC_ALL=C git -C "$REPO_ROOT" diff --shortstat "$BASE" 2>/dev/null || true)
 CHANGED_FILES=$(echo "$DIFF_STATS" | grep -oE '[0-9]+ files? changed' | grep -oE '[0-9]+' || echo 0)
 INSERTIONS=$(echo "$DIFF_STATS" | grep -oE '[0-9]+ insertions?' | grep -oE '[0-9]+' || echo 0)
 DELETIONS=$(echo "$DIFF_STATS" | grep -oE '[0-9]+ deletions?' | grep -oE '[0-9]+' || echo 0)

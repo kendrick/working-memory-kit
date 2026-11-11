@@ -39,7 +39,19 @@ if ($gitDir -and (
 $prevLcAll = $env:LC_ALL
 $env:LC_ALL = 'C'
 try {
-    $diffStats = git -C $repoRoot diff --shortstat HEAD 2>$null
+    # Diffing against HEAD would see a clean tree after commit-as-you-go (#35).
+    # Trim: the bash start hook writes the base with a trailing newline. A
+    # missing, empty, or gc'd base falls back to HEAD.
+    $base = 'HEAD'
+    $baseFile = Join-Path $gitDir 'working-memory-session-base'
+    if ($gitDir -and (Test-Path $baseFile)) {
+        $recorded = ((Get-Content -Raw $baseFile) + '').Trim()
+        if ($recorded) {
+            git -C $repoRoot cat-file -e "$recorded^{commit}" 2>$null
+            if ($LASTEXITCODE -eq 0) { $base = $recorded }
+        }
+    }
+    $diffStats = git -C $repoRoot diff --shortstat $base 2>$null
 } finally {
     if ($null -eq $prevLcAll) { Remove-Item Env:LC_ALL -ErrorAction SilentlyContinue }
     else { $env:LC_ALL = $prevLcAll }

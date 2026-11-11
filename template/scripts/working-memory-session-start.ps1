@@ -12,6 +12,15 @@ $wmDir = Join-Path $repoRoot '_working-memory'
 # consumers. Bail quietly so unrelated repos don't see noise.
 if (-not (Test-Path $wmDir)) { exit 0 }
 
+# Session-end diffs against this commit, so work committed mid-session still
+# counts (#35). Lives in the git dir: never tracked, and per-worktree. No HEAD
+# (empty repo) means no base; end falls back to HEAD.
+$baseSha = git -C $repoRoot rev-parse --verify -q HEAD 2>$null
+$gitDir = git -C $repoRoot rev-parse --absolute-git-dir 2>$null
+if ($baseSha -and $gitDir) {
+    Set-Content -Path (Join-Path $gitDir 'working-memory-session-base') -Value $baseSha -NoNewline -Encoding ascii
+}
+
 # Reads a key from .working-memoryrc with a default. Parses key=value instead
 # of dot-sourcing, so a malicious rc can't execute arbitrary code.
 function Get-Cfg ($key, $default) {
