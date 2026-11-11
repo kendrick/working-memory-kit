@@ -110,3 +110,40 @@ assert "mem\\t/" in m, m
 assert "AGENTS.md\x27s" in m, m
 '
 }
+
+# Claude Code ignores systemMessage for model context; SessionStart only injects
+# hookSpecificOutput.additionalContext.
+@test "session-start --claude emits additionalContext and no systemMessage" {
+  START="$KIT_ROOT/template/scripts/working-memory-session-start.sh"
+  printf 'x\n' > _working-memory/activeContext.md
+  run bash "$START" --claude
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | python3 -c '
+import json, sys
+o = json.load(sys.stdin)
+assert list(o) == ["hookSpecificOutput"], o
+h = o["hookSpecificOutput"]
+assert h["hookEventName"] == "SessionStart", h
+assert "AGENT INSTRUCTION" in h["additionalContext"], h
+'
+}
+
+@test "session-start --claude carries the size-warning condition" {
+  START="$KIT_ROOT/template/scripts/working-memory-session-start.sh"
+  printf 'MAX_ACTIVE_CONTEXT_LINES=2\n' > .working-memoryrc
+  printf 'a\nb\nc\nd\n' > _working-memory/activeContext.md
+  run bash "$START" --claude
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | python3 -c '
+import json, sys
+m = json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"]
+assert "AGENT INSTRUCTION" in m and "has 4 non-empty lines (limit is 2)" in m, m
+'
+}
+
+@test "session-start without --claude still emits systemMessage" {
+  START="$KIT_ROOT/template/scripts/working-memory-session-start.sh"
+  printf 'x\n' > _working-memory/activeContext.md
+  run bash "$START"
+  printf '%s' "$output" | python3 -c 'import json,sys; assert "systemMessage" in json.load(sys.stdin)'
+}

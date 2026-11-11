@@ -296,7 +296,7 @@ teardown() { teardown_repo; }
   [ "$(count_hook SessionStart working-memory-session-start.sh)" -eq 1 ]
   [ "$(count_hook SessionEnd working-memory-session-end.sh)" -eq 1 ]
   cmd="$(node -e 'console.log(require(process.cwd()+"/.claude/settings.json").hooks.SessionStart[0].hooks[0].command)')"
-  CLAUDE_PROJECT_DIR="$PWD" bash -c "$cmd" | python3 -c 'import json,sys; assert json.load(sys.stdin)["systemMessage"]'
+  CLAUDE_PROJECT_DIR="$PWD" bash -c "$cmd" | python3 -c 'import json,sys; assert json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"]'
 }
 
 @test "re-install keeps one copy of each Claude hook and a pre-existing hook (#36)" {
