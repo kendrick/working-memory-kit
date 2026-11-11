@@ -81,6 +81,81 @@ Describe 'session-end hook' {
         ($out | ConvertFrom-Json).systemMessage | Should -BeLike "*AGENTS.md's*"
     }
 
+    # #33: nudge toward `ltm promote` when a Bank-connected repo gains a decisionLog entry.
+    Context 'ltm promote nudge (#33)' {
+        BeforeEach {
+            Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=50`nNUDGE_LINE_THRESHOLD=5000"
+            Set-Content .ltm.yaml 'bank: x'
+            $start = Join-Path $KitRoot 'template/scripts/working-memory-session-start.ps1'
+        }
+        # Defined here so the tests compare against the spec text, not the script's own template.
+        BeforeAll {
+            function Get-PromoteLine ($title) {
+                "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry `"$title`""
+            }
+        }
+
+        It 'session-end prints an ltm promote line per new decisionLog entry when .ltm.yaml exists (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "# Decision Log`n`n## 2026-11-01: Cap retries at three per request`n`nbody`n`n## 2026-11-02: Drop the v1 API`n"
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            $msg | Should -BeExactly ((Get-PromoteLine 'Cap retries at three per request') + "`n" + (Get-PromoteLine 'Drop the v1 API'))
+        }
+
+        It 'the promote nudge counts an entry committed during the session (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap retries at three per request`n"
+            git add -A; git commit -q -m work
+            (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage | Should -BeExactly (Get-PromoteLine 'Cap retries at three per request')
+        }
+
+        It 'no .ltm.yaml, no promote line (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap retries at three per request`n"
+            Remove-Item .ltm.yaml -Force -ErrorAction Stop
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'a new heading in conventions.md prints nothing (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/conventions.md' "## 2026-11-01: Cap retries at three per request`n"
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It "editing an existing entry's body prints nothing (#33)" {
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap retries at three per request`n`nbody`n"
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Add-Content '_working-memory/decisionLog.md' 'more body'
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'the promote line keeps the JSON valid with a quote in the title (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Use `"at most once`" delivery`n"
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            $msg | Should -BeExactly (Get-PromoteLine 'Use "at most once" delivery')
+        }
+
+        It 'the promote line follows the size nudge when both fire (#33)' {
+            Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=1`nNUDGE_LINE_THRESHOLD=1"
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap retries at three per request`n"
+            Set-Content f1.txt 'a'; Set-Content f2.txt 'b'
+            git add -A
+            $lines = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage -split "`n"
+            $lines.Count | Should -Be 2
+            $lines[0] | Should -Match '^You changed .* this session\. .*update-working-memory'
+            $lines[1] | Should -BeExactly (Get-PromoteLine 'Cap retries at three per request')
+        }
+    }
+
     # #35: the nudge counts everything since the commit recorded at session start.
     Context 'base recorded at session start (#35)' {
         BeforeEach {

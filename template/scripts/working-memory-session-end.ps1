@@ -111,9 +111,40 @@ if ($reason) {
     }
 }
 
+# #33: a Bank-connected repo (.ltm.yaml at the root) that gained a decisionLog
+# heading since the session base gets the `ltm promote` command to run. The hook
+# only prints it. "New" means the heading line is absent at $base, so an entry
+# committed mid-session still counts and body edits never do.
+$promote = @()
+$logRel = '_working-memory/decisionLog.md'
+$logFile = Join-Path $repoRoot $logRel
+if ((Test-Path (Join-Path $repoRoot '.ltm.yaml')) -and (Test-Path $logFile)) {
+    # Unreadable file (ACL, mode bits) throws under 'Stop'; treat as no entries.
+    $now = ''
+    try { $now = (Get-Content -Raw -Encoding UTF8 $logFile) + '' } catch {}
+    # A base without the file makes git show fail; relax 'Stop' for 5.1's stderr ErrorRecords.
+    $then = ''
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $then = (@(git -C $repoRoot show "${base}:$logRel" 2>$null) -join "`n") } finally { $ErrorActionPreference = $prevEap }
+    $heading = '^## (.*)$'
+    $old = @(($then -split "`n") | ForEach-Object { $_.TrimEnd("`r") } | Where-Object { $_ -match $heading })
+    foreach ($h in (($now -split "`n") | ForEach-Object { $_.TrimEnd("`r") } | Where-Object { $_ -match $heading })) {
+        if ($old -contains $h) { continue }
+        $title = if ($h -match '^## \d{4}-\d{2}-\d{2}: (.+)$') { $Matches[1] } else { $h.Substring(3) }
+        $promote += "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote $logRel --entry `"$title`""
+    }
+}
+
+$msg = $null
 if ($reason) {
     # A quote or backslash in a pointer must reach the host escaped, or the
     # host drops the message silently.
     $msg = "You changed $reason this session.$extra Use the update-working-memory skill or the supplied update script to keep working memory current."
+}
+if ($promote.Count -gt 0) {
+    $msg = (@($msg) + $promote | Where-Object { $_ }) -join "`n"
+}
+if ($msg) {
     Write-Output ([pscustomobject]@{ systemMessage = $msg } | ConvertTo-Json -Compress)
 }
