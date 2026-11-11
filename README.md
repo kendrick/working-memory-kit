@@ -135,7 +135,7 @@ It also adds `_working-memory/activeContext.md` to `.gitignore`. `activeContext`
 
 ## How it works
 
-Every session starts with a read of `activeContext.md`. The session-start hook warns you if it's grown past the line limit.
+Every session starts with a read of `activeContext.md`. The session-start hook warns you if it's grown past the line limit. In Claude Code, the agent gets that warning instead, along with an instruction to prune the file.
 
 The other six files load on demand. `AGENTS.md` or `.github/copilot-instructions.md` (depending on your project tooling) tell the agent which file to open for which kind of work:
 
