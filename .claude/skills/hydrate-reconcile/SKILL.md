@@ -12,7 +12,7 @@ Input: drafts from `hydrate-draft`.
 
 When this skill is activated:
 
-1. For each draft, check against existing working memory if present:
+1. For each draft, check against existing working memory if present. `scope: org` findings pass through unannotated, since nothing in working memory is their target.
    - **Net new:** no matching content; safe to add.
    - **Would overwrite:** existing content covers the same territory; surface the diff.
 2. For each draft, sanity-check against the codebase. The draft asserts something; does the code agree?

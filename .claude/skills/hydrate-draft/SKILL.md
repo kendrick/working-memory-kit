@@ -12,7 +12,9 @@ Input: findings from `hydrate-extract`.
 
 When this skill is activated:
 
-1. For each finding, route to the right working memory file:
+`scope: org` findings aren't drafted into any working-memory file; pass them to `hydrate-propose` as they are.
+
+1. For each `scope: repo` finding, route to the right working memory file:
 
    | Finding type                                                  | Lands in                                                     |
    | ------------------------------------------------------------- | ------------------------------------------------------------ |

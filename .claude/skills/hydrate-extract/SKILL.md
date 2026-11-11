@@ -18,6 +18,8 @@ When this skill is activated:
 2. For each detected fact:
    - Identify the target file in working memory (see `hydrate-draft` mapping table)
    - Pull a one-sentence statement
+   - Tag `scope`: a finding is `scope: org` exactly when it names more than one repo or a governing team outside this repo's. Everything else is `scope: repo`. A repo named twice under two names is still one repo, and this repo's own team governing it doesn't count as outside.
+   - Write `scope_reason`: one line naming what triggered `org` (the second repo or the outside team), or `single repo, team-owned` for `repo`
    - Note source provenance: file path, commit hash, line range
 3. Output one finding per fact as a small structured record.
 
@@ -29,14 +31,26 @@ findings:
     target: projectOverview.md (Stack section)
     statement: 'Stack is React 18, TypeScript 5, Tailwind 3, vitest.'
     confidence: high
+    scope: repo
+    scope_reason: single repo, team-owned
   - source: src/api/types.ts
     target: dataContracts.md
     statement: 'User and Account interfaces define the canonical API response shapes.'
     confidence: high
+    scope: repo
+    scope_reason: single repo, team-owned
   - source: git log
     target: decisionLog.md
     statement: 'Migrated from Redux to Zustand on 2026-03-12 (commit a4f8e21).'
     confidence: medium
+    scope: repo
+    scope_reason: single repo, team-owned
+  - source: docs/adr/0007-shared-auth.md
+    target: decisionLog.md
+    statement: "Orders, billing, and checkout services all authenticate through the platform team's gateway."
+    confidence: high
+    scope: org
+    scope_reason: names three services and the platform team
 ```
 
 ## Common gotchas

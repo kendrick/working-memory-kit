@@ -18,7 +18,7 @@ You run the five-phase AI-assisted hydration pipeline: discover, extract, draft,
 3. Invoke `hydrate-extract` against each source to pull findings. A finding is one sentence per fact, with provenance back to the source.
 4. Invoke `hydrate-draft` to map findings into the six working-memory files.
 5. Invoke `hydrate-reconcile` to annotate the drafts against existing working-memory state. Each draft gets marked net-new, would-overwrite, or conflicts-with-code.
-6. Invoke `hydrate-propose` to stage drafts as a commit (or a PR for multi-developer projects) for human review. **Stop here.** Do not advance until the human merges.
+6. Invoke `hydrate-propose` to stage drafts as a commit (or a PR for multi-developer projects) for human review. It also lists any org-scope findings with their `ltm propose` commands and runs none of them. **Stop here.** Do not advance until the human merges.
 
 ## Constraints
 
