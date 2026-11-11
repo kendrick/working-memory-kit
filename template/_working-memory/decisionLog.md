@@ -5,6 +5,7 @@ Append-only; newest entry on top. Never edit a past entry's body. To retire one,
 <!-- Format: -->
 <!-- ## YYYY-MM-DD: Short title -->
 <!-- status: accepted -->
+<!-- -->
 <!-- **Source:** the commit, PR, or discussion it came from (optional for hand-written entries) -->
 <!-- **Context:** Why this came up. -->
 <!-- **Decision:** What was decided. -->
