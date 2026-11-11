@@ -9,6 +9,7 @@ setup() {
   setup_repo
   mkdir -p _working-memory
   HOOK="$KIT_ROOT/template/scripts/working-memory-session-end.sh"
+  START="$KIT_ROOT/template/scripts/working-memory-session-start.sh"
 }
 teardown() { teardown_repo; }
 
@@ -146,4 +147,112 @@ assert "AGENT INSTRUCTION" in m and "has 4 non-empty lines (limit is 2)" in m, m
   printf 'x\n' > _working-memory/activeContext.md
   run bash "$START"
   printf '%s' "$output" | python3 -c 'import json,sys; assert "systemMessage" in json.load(sys.stdin)'
+}
+
+# #35: commit-as-you-go sessions end with a clean tree, so the nudge has to
+# count from the commit recorded at session start rather than HEAD.
+make_files() {
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do printf 'x\n' > "w$i.txt"; done
+}
+
+@test "session-end counts work committed after session start (#35)" {
+  printf 'NUDGE_FILE_THRESHOLD=5\nNUDGE_LINE_THRESHOLD=5000\n' > .working-memoryrc
+  commit_base
+  bash "$START" </dev/null
+  make_files
+  git add -A
+  git commit -q -m work
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '10 files'
+}
+
+@test "session-end is silent when the only commit predates session start (#35)" {
+  printf 'NUDGE_FILE_THRESHOLD=5\nNUDGE_LINE_THRESHOLD=5000\n' > .working-memoryrc
+  make_files
+  commit_base
+  bash "$START" </dev/null
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "session-end falls back to HEAD when the recorded base is gone (#35)" {
+  printf 'NUDGE_FILE_THRESHOLD=5\nNUDGE_LINE_THRESHOLD=5000\n' > .working-memoryrc
+  commit_base
+  printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' > "$(git rev-parse --absolute-git-dir)/working-memory-session-base"
+  make_files
+  git add -A
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '10 files'
+}
+
+@test "session-end reads a base file with no trailing newline (#35)" {
+  printf 'NUDGE_FILE_THRESHOLD=5\nNUDGE_LINE_THRESHOLD=5000\n' > .working-memoryrc
+  commit_base
+  printf '%s' "$(git rev-parse HEAD)" > "$(git rev-parse --absolute-git-dir)/working-memory-session-base"
+  make_files
+  git add -A
+  git commit -q -m work
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '10 files'
+}
+
+@test "session-start --claude keeps the base on a compact (#35)" {
+  printf 'NUDGE_FILE_THRESHOLD=5\nNUDGE_LINE_THRESHOLD=5000\n' > .working-memoryrc
+  commit_base
+  bash "$START" </dev/null
+  make_files
+  git add -A
+  git commit -q -m work
+  echo '{"source": "compact"}' | bash "$START" --claude >/dev/null
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '10 files'
+}
+
+@test "session-start writes no base in a repo with no commits (#35)" {
+  run bash "$START" </dev/null
+  [ "$status" -eq 0 ]
+  [ ! -e "$(git rev-parse --absolute-git-dir)/working-memory-session-base" ]
+}
+
+@test "session-start --claude resets the base when compact is only another value (#35)" {
+  printf 'NUDGE_FILE_THRESHOLD=5\nNUDGE_LINE_THRESHOLD=5000\n' > .working-memoryrc
+  commit_base
+  bash "$START" </dev/null
+  make_files
+  git add -A
+  git commit -q -m work
+  echo '{"source":"startup","x":"compact"}' | bash "$START" --claude >/dev/null
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "session-start exits 0 when the git dir is read-only (#35)" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores chmod"
+  printf 'x\n' > seed.txt
+  commit_base
+  gd="$(git rev-parse --absolute-git-dir)"
+  chmod a-w "$gd"
+  run bash "$START" </dev/null
+  chmod u+w "$gd"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q 'systemMessage'
+}
+
+@test "session-end exits 0 when the base file is unreadable (#35)" {
+  [ "$(id -u)" -ne 0 ] || skip "root reads a mode-000 file"
+  printf 'x\n' > seed.txt
+  commit_base
+  base="$(git rev-parse --absolute-git-dir)/working-memory-session-base"
+  printf 'x' > "$base"
+  chmod 000 "$base"
+  run bash "$HOOK"
+  chmod 600 "$base"
+  [ "$status" -eq 0 ]
 }

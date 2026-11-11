@@ -39,7 +39,27 @@ if ($gitDir -and (
 $prevLcAll = $env:LC_ALL
 $env:LC_ALL = 'C'
 try {
-    $diffStats = git -C $repoRoot diff --shortstat HEAD 2>$null
+    # Diffing against HEAD would see a clean tree after commit-as-you-go (#35).
+    # Trim: the bash start hook writes the base with a trailing newline. A
+    # missing, empty, or gc'd base falls back to HEAD.
+    $base = 'HEAD'
+    if ($gitDir -and (Test-Path (Join-Path $gitDir 'working-memory-session-base'))) {
+        # An unreadable base (ACL, mode bits) throws under 'Stop'; keep HEAD.
+        $recorded = ''
+        try { $recorded = ((Get-Content -Raw (Join-Path $gitDir 'working-memory-session-base')) + '').Trim() } catch {}
+        if ($recorded) {
+            # Windows PowerShell 5.1 turns native stderr into ErrorRecords, and
+            # cat-file prints "fatal: Not a valid object name" for a gc'd base.
+            # Under 'Stop' that throws, so relax it around this one call.
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                git -C $repoRoot cat-file -e "$recorded^{commit}" 2>$null
+                if ($LASTEXITCODE -eq 0) { $base = $recorded }
+            } finally { $ErrorActionPreference = $prevEap }
+        }
+    }
+    $diffStats = git -C $repoRoot diff --shortstat $base 2>$null
 } finally {
     if ($null -eq $prevLcAll) { Remove-Item Env:LC_ALL -ErrorAction SilentlyContinue }
     else { $env:LC_ALL = $prevLcAll }

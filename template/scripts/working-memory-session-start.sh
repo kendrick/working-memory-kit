@@ -13,6 +13,27 @@ if [ ! -d "$WM_DIR" ]; then
   exit 0
 fi
 
+# Session-end diffs against this commit so work committed mid-session still
+# counts (#35). It lives in the git dir: never tracked, per-worktree. Claude
+# Code refires SessionStart on compaction; resetting the base there would drop
+# the session's earlier commits, so a compact keeps the old one. The -t guards
+# a hand run with an open stdin. No HEAD (empty repo) means no base.
+KEEP_BASE=0
+if [ "${1:-}" = "--claude" ]; then
+  IFS= read -r -t 2 -d '' INPUT || true
+  if printf '%s' "${INPUT:-}" | grep -Eq '"source"[[:space:]]*:[[:space:]]*"compact"'; then
+    KEEP_BASE=1
+  fi
+fi
+if [ "$KEEP_BASE" -eq 0 ]; then
+  BASE_SHA=$(git -C "$REPO_ROOT" rev-parse --verify -q HEAD 2>/dev/null || true)
+  BASE_DIR=$(git -C "$REPO_ROOT" rev-parse --absolute-git-dir 2>/dev/null || true)
+  if [ -n "$BASE_SHA" ] && [ -n "$BASE_DIR" ]; then
+    # A read-only git dir must not fail SessionStart; the nudge just falls back to HEAD.
+    { printf '%s\n' "$BASE_SHA" > "$BASE_DIR/working-memory-session-base"; } 2>/dev/null || true
+  fi
+fi
+
 # Reads a key from .working-memoryrc with a default. Parses key=value instead
 # of sourcing the file, so a malicious rc can't execute arbitrary shell.
 read_cfg() {
