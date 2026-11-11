@@ -27,7 +27,7 @@ When this skill is activated, perform the following:
 | `dataContracts.md` | Update when interfaces, schemas, or API shapes change. |
 | `conventions.md` | Update when a new pattern emerges or an old one is deprecated. |
 | `openQuestions.md` | Remove answered questions (move answers to decision log). |
-| `antipatterns.md` | Append only. Never edit a past entry's body. To retire one, set `status: superseded` and `superseded_by:` in the lines under its heading. Add an entry when an approach was tried and abandoned — include a specific "Don't suggest" line so future agents avoid re-proposing it. |
+| `antipatterns.md` | Append only. Never edit a past entry's body. To retire one, set `status: superseded` and `superseded_by:` in the lines under its heading. Add an entry when an approach was tried and abandoned; include a specific "Don't suggest" line so future agents avoid re-proposing it. |
 
 ## Entry headings
 
@@ -37,8 +37,8 @@ Start each entry in `decisionLog.md` and `antipatterns.md` with `## YYYY-MM-DD: 
 
 When a new entry replaces an old one in `decisionLog.md` or `antipatterns.md`, follow these steps in order.
 
-1. Check the old entry's block for a `promoted_to:` line. If it has one, don't touch the entry. Write the new entry, then tell the user the old one now lives in the Bank under that Record id and changes only through a Bank PR.
-2. Otherwise, write the new entry on top. In the old entry, set `status: superseded` (replacing any existing `status:` line) and add `superseded_by:` with the new entry's full heading text, without the `## `.
+1. Check the old entry's block for a `promoted_to:` line, including the `- promoted_to:` and `**promoted_to:**` forms. If it has one, don't touch the entry. Write the new entry, then tell the user the old one now lives in the Bank under that Record id and changes only through a Bank PR.
+2. Otherwise, write the new entry on top. In the old entry, set `status: superseded` (replacing a `status:` line already in the block under the heading) and add `superseded_by:` with the new entry's full heading text, without the `## `.
 3. If the replacing entry is in the other log, name that file in the proposal to the user.
 4. Treat an entry with no `status:` line as `accepted`.
 
