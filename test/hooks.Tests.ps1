@@ -112,6 +112,19 @@ Describe 'session-end hook' {
             Invoke-SessionEndHook | Should -Match '10 files'
         }
 
+        It 'session-end falls back to HEAD when the base file is unreadable (#35)' -Skip:($IsWindows -or $PSVersionTable.PSEdition -eq 'Desktop' -or (id -u) -eq '0') {
+            git add -A; git commit -q -m base
+            $base = Join-Path (git rev-parse --absolute-git-dir) 'working-memory-session-base'
+            Set-Content $base 'x'
+            chmod 000 $base
+            try {
+                foreach ($i in 1..10) { Set-Content "c$i.txt" 'x' }
+                git add -A
+                $out = Invoke-SessionEndHook
+            } finally { chmod 600 $base }
+            $out | Should -Match '10 files'
+        }
+
         It 'session-end trims a trailing newline in the base (#35)' {
             git add -A; git commit -q -m base
             $gitDir = git rev-parse --absolute-git-dir

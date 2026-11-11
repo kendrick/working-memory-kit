@@ -44,7 +44,9 @@ try {
     # missing, empty, or gc'd base falls back to HEAD.
     $base = 'HEAD'
     if ($gitDir -and (Test-Path (Join-Path $gitDir 'working-memory-session-base'))) {
-        $recorded = ((Get-Content -Raw (Join-Path $gitDir 'working-memory-session-base')) + '').Trim()
+        # An unreadable base (ACL, mode bits) throws under 'Stop'; keep HEAD.
+        $recorded = ''
+        try { $recorded = ((Get-Content -Raw (Join-Path $gitDir 'working-memory-session-base')) + '').Trim() } catch {}
         if ($recorded) {
             # Windows PowerShell 5.1 turns native stderr into ErrorRecords, and
             # cat-file prints "fatal: Not a valid object name" for a gc'd base.
