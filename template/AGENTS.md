@@ -34,7 +34,7 @@ This project uses a two-tier working memory at `_working-memory/`.
 
 - After completing a feature or making a significant decision, update `activeContext.md` and the relevant on-demand file.
 - `activeContext.md` is a queue: evict completed items to `decisionLog.md`.
-- `decisionLog.md` and `antipatterns.md` are both append-only. Never edit past entries.
+- `decisionLog.md` and `antipatterns.md` are both append-only. Never edit a past entry's body. To mark an entry superseded, set `status: superseded` and add `superseded_by:` directly under its heading.
 - Never let `activeContext.md` exceed 20 lines.
 <!-- working-memory:end -->
 
