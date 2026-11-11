@@ -364,6 +364,7 @@ merge_claude_hooks() {
 #   process  coexist and wire (ownership map + AGENTS cross-ref + conventions deferral)
 #   memory   warn only; two durable-memory systems don't divide cleanly
 #   note     mention only (overlaps the kit, nothing to wire)
+#   bank     a file trigger; print the promote line, wire nothing
 # Triggers are tool-unique top-level paths; a bare specs/ is never a trigger.
 WMK_NEIGHBORS="Spec Kit|process|.specify|.specify/memory/constitution.md
 OpenSpec|process|openspec|openspec/project.md
@@ -372,6 +373,7 @@ BMAD|process|bmad-core:.bmad-core|bmad-core/data/technical-preferences.md
 Agent OS|process|.agent-os|.agent-os/standards/
 Task Master|process|.taskmaster|
 Memory Bank|memory|memory-bank|
+long-term-memory-kit|bank|.ltm.yaml|
 ADRs|note|docs/adr:docs/decisions|"
 
 # Echoes matched rows (name|kind|found-path|principles_file), one per line, for
@@ -383,7 +385,12 @@ detect_neighbors() {
     [ -z "$name" ] && continue
     found=""
     for trig in $(printf '%s' "$triggers" | tr ':' ' '); do
-      [ -d "$TARGET_DIR/$trig" ] && { found="$trig"; break; }
+      # Only a bank row is a file; a stray file named like a dir trigger must not match.
+      if [ "$kind" = bank ]; then
+        [ -f "$TARGET_DIR/$trig" ] && { found="$trig"; break; }
+      else
+        [ -d "$TARGET_DIR/$trig" ] && { found="$trig"; break; }
+      fi
     done
     [ -n "$found" ] && printf '%s|%s|%s|%s\n' "$name" "$kind" "$found" "$principles"
   done <<EOF
@@ -427,6 +434,10 @@ print_coexistence_summary() {
       note)
         if [ "$mapped" -eq 0 ]; then say ""; info "Coexistence: who owns what now that neighbors are present:"; mapped=1; fi
         say "  - $name ($found/): overlaps decisionLog.md; left as-is, nothing wired."
+        ;;
+      bank)
+        if [ "$mapped" -eq 0 ]; then say ""; info "Coexistence: who owns what now that neighbors are present:"; mapped=1; fi
+        say "  - $name ($found): a Bank holds what spans repos; _working-memory/ holds what this repo knows about itself. ltm promote moves an entry from one to the other."
         ;;
       memory)
         warn "Two durable-memory systems detected (working-memory-kit + $name, in $found/). They overlap; pick one as canonical or consolidate. The kit won't auto-merge."

@@ -335,6 +335,7 @@ function Merge-ClaudeHooks ($src, $dst) {
 #   process  coexist and wire (ownership map + AGENTS cross-ref + conventions deferral)
 #   memory   warn only; two durable-memory systems don't divide cleanly
 #   note     mention only (overlaps the kit, nothing to wire)
+#   bank     a file trigger; print the promote line, wire nothing
 # Triggers are tool-unique top-level paths; a bare specs/ is never a trigger.
 $WmkNeighbors = @(
     @{ Name = 'Spec Kit';    Kind = 'process'; Triggers = @('.specify');                Principles = '.specify/memory/constitution.md' }
@@ -344,6 +345,7 @@ $WmkNeighbors = @(
     @{ Name = 'Agent OS';    Kind = 'process'; Triggers = @('.agent-os');               Principles = '.agent-os/standards/' }
     @{ Name = 'Task Master'; Kind = 'process'; Triggers = @('.taskmaster');             Principles = '' }
     @{ Name = 'Memory Bank'; Kind = 'memory';  Triggers = @('memory-bank');             Principles = '' }
+    @{ Name = 'long-term-memory-kit'; Kind = 'bank'; Triggers = @('.ltm.yaml'); Principles = '' }
     @{ Name = 'ADRs';        Kind = 'note';    Triggers = @('docs/adr', 'docs/decisions'); Principles = '' }
 )
 
@@ -352,8 +354,10 @@ $WmkNeighbors = @(
 function Get-Neighbors ($targetDir) {
     $matched = @()
     foreach ($n in $WmkNeighbors) {
+        # Only a bank row is a file; a stray file named like a dir trigger must not match.
+        $pathType = if ($n.Kind -eq 'bank') { 'Leaf' } else { 'Container' }
         foreach ($t in $n.Triggers) {
-            if (Test-Path (Join-Path $targetDir $t) -PathType Container) {
+            if (Test-Path (Join-Path $targetDir $t) -PathType $pathType) {
                 $matched += [PSCustomObject]@{ Name = $n.Name; Kind = $n.Kind; Found = $t; Principles = $n.Principles }
                 break
             }
@@ -374,7 +378,7 @@ function Get-ProcessXref ($neighbors) {
 # Prints the who-owns-what map for process/note neighbors and a warning for any
 # memory neighbor.
 function Write-CoexistenceSummary ($neighbors) {
-    $mapped = $neighbors | Where-Object { $_.Kind -eq 'process' -or $_.Kind -eq 'note' }
+    $mapped = $neighbors | Where-Object { $_.Kind -eq 'process' -or $_.Kind -eq 'note' -or $_.Kind -eq 'bank' }
     if ($mapped) {
         Write-Host ''
         Write-Info 'Coexistence: who owns what now that neighbors are present:'
@@ -383,6 +387,8 @@ function Write-CoexistenceSummary ($neighbors) {
                 $p = if ($n.Principles) { $n.Principles } else { 'its own dir' }
                 $label = if ($n.Name) { $n.Name } else { 'external spec tooling' }
                 Write-Host "  - $label ($($n.Found)/): principles in $p; per-feature specs stay in the tool."
+            } elseif ($n.Kind -eq 'bank') {
+                Write-Host "  - $($n.Name) ($($n.Found)): a Bank holds what spans repos; _working-memory/ holds what this repo knows about itself. ltm promote moves an entry from one to the other."
             } else {
                 Write-Host "  - $($n.Name) ($($n.Found)/): overlaps decisionLog.md; left as-is, nothing wired."
             }
