@@ -99,7 +99,7 @@ $KitnewSentinel = 'working-memory-kit: a newer version of this file shipped'
 function Get-RenderedMachinery ($src) {
     if ($WmDir -eq $WmDirDefault) { return $src }
     $tmp = [IO.Path]::GetTempFileName()
-    $content = ([IO.File]::ReadAllText($src)) -replace '_working-memory', $WmDir
+    $content = ([IO.File]::ReadAllText($src)).Replace('_working-memory', $WmDir)
     [IO.File]::WriteAllText($tmp, $content)
     return $tmp
 }
@@ -335,9 +335,10 @@ function Set-RcKey ($key, $value) {
     }
 }
 
-# The rc can arrive in someone else's commit, so refuse a value that would write outside the repo.
-function Test-WmDirOutsideRepo ($dir) {
-    return ($dir -match '^([\\/]|[A-Za-z]:)') -or (($dir -split '[\\/]') -contains '..')
+# The rc can arrive in someone else's commit, so refuse a value that would write outside the repo or break out of a rendered hook.
+function Test-WmDirUnsafe ($dir) {
+    # Allow-list: the dir lands inside quoted strings in the rendered hook scripts.
+    return ($dir -match '[^A-Za-z0-9._/\\-]') -or ($dir -match '^([\\/]|[A-Za-z]:)') -or (($dir -split '[\\/]') -contains '..')
 }
 
 # ---------- parse args ----------
@@ -506,8 +507,8 @@ if ((-not $Neighbors) -and (-not $NoCoexist) -and ((Get-RcKey 'coexistence_asked
 # substitutes the literal token in copied template files.
 $WmDirDefault = '_working-memory'
 $wmDirRc = (Get-RcKey 'WORKING_MEMORY_DIR' '') -replace '[\\/]$', ''
-if ($wmDirRc -and (Test-WmDirOutsideRepo $wmDirRc)) {
-    Write-Warn "ignoring WORKING_MEMORY_DIR=`"$wmDirRc`" in .working-memoryrc: it must be a relative path inside the repo"
+if ($wmDirRc -and (Test-WmDirUnsafe $wmDirRc)) {
+    Write-Warn "ignoring WORKING_MEMORY_DIR=`"$wmDirRc`" in .working-memoryrc: it must be a relative path inside the repo using only letters, digits, and . _ - / \"
     $wmDirRc = ''
 }
 $WmDir = if ($wmDirRc) { $wmDirRc } else { $WmDirDefault }
@@ -561,8 +562,8 @@ if ($Mode -eq 'upgrade') { Write-Info 'upgrading...' } else { Write-Info 'scaffo
 
 # A headless re-run can't prompt for the dir, so without this key it forks a second _working-memory/.
 if (($WmDir -ne $WmDirDefault) -or $wmDirRc) {
-    if (Test-WmDirOutsideRepo $WmDir) {
-        Write-Warn "not saving WORKING_MEMORY_DIR=`"$WmDir`": it points outside the repo, so a re-run won't reuse it"
+    if (Test-WmDirUnsafe $WmDir) {
+        Write-Warn "not saving WORKING_MEMORY_DIR=`"$WmDir`": a re-run only reuses a relative path inside the repo using only letters, digits, and . _ - / \"
     } else {
         Set-RcKey 'WORKING_MEMORY_DIR' "`"$WmDir`""
     }
@@ -805,7 +806,7 @@ if ($WmDir -ne $WmDirDefault) {
             # closing quote in scripts, end of line. The token "_working-memory"
             # only ever appears as the install path; script filenames, env vars,
             # and .working-memoryrc do not collide.
-            $content = $content -replace '_working-memory', $WmDir
+            $content = $content.Replace('_working-memory', $WmDir)
             Set-Content -Path $full -Value $content -NoNewline
         }
     }

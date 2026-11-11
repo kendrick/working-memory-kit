@@ -251,7 +251,32 @@ teardown() { teardown_repo; }
   mkdir repo && cd repo && git init -q
   run run_installer_tty $'n\n../sib\n'
   [ -d ../sib ]
-  echo "$output" | grep -qF 'not saving WORKING_MEMORY_DIR="../sib": it points outside the repo, so a re-run won'"'"'t reuse it'
+  echo "$output" | grep -qF 'not saving WORKING_MEMORY_DIR="../sib": a re-run only reuses a relative path inside the repo using only letters, digits, and . _ - / \'
   run grep -q '^WORKING_MEMORY_DIR=' .working-memoryrc
   [ "$status" -ne 0 ]
+}
+
+@test "an rc dir outside the allow-list is refused before it reaches a hook (#49)" {
+  printf 'WORKING_MEMORY_DIR="x$(touch PWNED)"\n' > .working-memoryrc
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF 'ignoring WORKING_MEMORY_DIR="x$(touch PWNED)" in .working-memoryrc: it must be a relative path inside the repo using only letters, digits, and . _ - / \'
+  [ -d _working-memory ]
+  run find . -name PWNED; [ -z "$output" ]
+  run grep -rlF 'x$(touch' scripts; [ -z "$output" ]
+}
+
+@test "a typed dir with sed metacharacters can't inject a sed command (#49)" {
+  run run_installer_tty $'x|g;1e touch PWNED;#\n'
+  echo "$output" | grep -qF 'not saving WORKING_MEMORY_DIR="x|g;1e touch PWNED;#"'
+  # GNU sed would run `e touch PWNED` unescaped; BSD sed has no `e`, so the render assert bites there.
+  run find . -name PWNED; [ -z "$output" ]
+  grep -qF 'x|g;1e touch PWNED;#/activeContext.md' '.claude/skills/update-working-memory/SKILL.md'
+  grep -qF 'x|g;1e touch PWNED;#/' AGENTS.md
+}
+
+@test "a typed dir with & and a backslash renders literally (#49)" {
+  run_installer_tty $'a&b\\c\n'
+  grep -qF 'a&b\c/activeContext.md' '.claude/skills/update-working-memory/SKILL.md'
+  grep -qF 'a&b\c/' AGENTS.md
 }

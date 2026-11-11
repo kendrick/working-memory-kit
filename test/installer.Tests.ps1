@@ -222,4 +222,14 @@ Describe 'installer' {
         '_working-memory/decisionLog.md' | Should -Exist
         $outside | Should -Not -Exist
     }
+
+    It 'an rc dir outside the allow-list is refused before it reaches a hook (#49)' {
+        foreach ($dir in 'wm$&x', "x'+(New-Item PWNED)+'") {
+            Set-Content .working-memoryrc ('WORKING_MEMORY_DIR="' + $dir + '"')
+            Invoke-Installer | Should -Match 'using only letters, digits'
+            '_working-memory/decisionLog.md' | Should -Exist
+            Get-ChildItem -Recurse -Force -Filter PWNED | Should -BeNullOrEmpty
+            (Get-Content -Raw scripts/working-memory-session-start.ps1).Contains($dir) | Should -BeFalse
+        }
+    }
 }
