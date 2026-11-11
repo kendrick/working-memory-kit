@@ -121,6 +121,15 @@ Describe 'session-end hook' {
             Invoke-SessionEndHook | Should -Match '10 files'
         }
 
+        It 'session-end does not throw outside a git repo (#35)' {
+            $plain = Join-Path ([System.IO.Path]::GetTempPath()) ('wmk-ng-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+            New-Item -ItemType Directory -Path "$plain/_working-memory" -Force | Out-Null
+            Set-Location $plain; [Environment]::CurrentDirectory = $plain
+            try {
+                { & (Join-Path $KitRoot 'template/scripts/working-memory-session-end.ps1') 2>$null | Out-Null } | Should -Not -Throw
+            } finally { Set-Location $repo; [Environment]::CurrentDirectory = $repo; Remove-Item -Recurse -Force $plain }
+        }
+
         It 'session-start writes the full SHA, no newline, and nothing in an empty repo (#35)' {
             & $start | Out-Null
             $gitDir = git rev-parse --absolute-git-dir

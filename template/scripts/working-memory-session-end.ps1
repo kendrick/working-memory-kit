@@ -43,12 +43,18 @@ try {
     # Trim: the bash start hook writes the base with a trailing newline. A
     # missing, empty, or gc'd base falls back to HEAD.
     $base = 'HEAD'
-    $baseFile = Join-Path $gitDir 'working-memory-session-base'
-    if ($gitDir -and (Test-Path $baseFile)) {
-        $recorded = ((Get-Content -Raw $baseFile) + '').Trim()
+    if ($gitDir -and (Test-Path (Join-Path $gitDir 'working-memory-session-base'))) {
+        $recorded = ((Get-Content -Raw (Join-Path $gitDir 'working-memory-session-base')) + '').Trim()
         if ($recorded) {
-            git -C $repoRoot cat-file -e "$recorded^{commit}" 2>$null
-            if ($LASTEXITCODE -eq 0) { $base = $recorded }
+            # Windows PowerShell 5.1 turns native stderr into ErrorRecords, and
+            # cat-file prints "fatal: Not a valid object name" for a gc'd base.
+            # Under 'Stop' that throws, so relax it around this one call.
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                git -C $repoRoot cat-file -e "$recorded^{commit}" 2>$null
+                if ($LASTEXITCODE -eq 0) { $base = $recorded }
+            } finally { $ErrorActionPreference = $prevEap }
         }
     }
     $diffStats = git -C $repoRoot diff --shortstat $base 2>$null

@@ -17,8 +17,13 @@ if (-not (Test-Path $wmDir)) { exit 0 }
 # (empty repo) means no base; end falls back to HEAD.
 $baseSha = git -C $repoRoot rev-parse --verify -q HEAD 2>$null
 $gitDir = git -C $repoRoot rev-parse --absolute-git-dir 2>$null
+# No compact guard like the bash hook's: this script is only wired as Copilot's
+# Windows command, which never re-fires on compaction.
 if ($baseSha -and $gitDir) {
-    Set-Content -Path (Join-Path $gitDir 'working-memory-session-base') -Value $baseSha -NoNewline -Encoding ascii
+    # An unwritable git dir must not cost the developer the session-start message.
+    try {
+        Set-Content -Path (Join-Path $gitDir 'working-memory-session-base') -Value $baseSha -NoNewline -Encoding ascii
+    } catch { }
 }
 
 # Reads a key from .working-memoryrc with a default. Parses key=value instead

@@ -39,12 +39,13 @@ fi
 # valid under non-default locales.
 # Diff against the commit session-start recorded, not HEAD: a commit-as-you-go
 # session ends with a clean tree, so `diff HEAD` reads zero (#35). The .ps1
-# start writes no trailing newline, hence the `|| [ -n ]`. A missing or gc'd
-# base falls back to HEAD.
+# start writes no trailing newline, so read's non-zero return is ignored, and
+# an unreadable file leaves SAVED empty rather than tripping set -u. A
+# missing or gc'd base falls back to HEAD.
 BASE=HEAD
+SAVED=
 if [ -n "$GIT_DIR" ] && [ -f "$GIT_DIR/working-memory-session-base" ]; then
-  IFS= read -r SAVED < "$GIT_DIR/working-memory-session-base" || [ -n "$SAVED" ] || true
-  SAVED="${SAVED:-}"
+  IFS= read -r SAVED 2>/dev/null < "$GIT_DIR/working-memory-session-base" || true
   if [ -n "$SAVED" ] && git -C "$REPO_ROOT" cat-file -e "${SAVED}^{commit}" 2>/dev/null; then
     BASE="$SAVED"
   fi

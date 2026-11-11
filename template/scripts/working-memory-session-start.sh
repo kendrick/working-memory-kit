@@ -21,15 +21,16 @@ fi
 KEEP_BASE=0
 if [ "${1:-}" = "--claude" ]; then
   IFS= read -r -t 2 -d '' INPUT || true
-  case "${INPUT:-}" in
-    *'"source"'*:*'"compact"'*) KEEP_BASE=1 ;;
-  esac
+  if printf '%s' "${INPUT:-}" | grep -Eq '"source"[[:space:]]*:[[:space:]]*"compact"'; then
+    KEEP_BASE=1
+  fi
 fi
 if [ "$KEEP_BASE" -eq 0 ]; then
   BASE_SHA=$(git -C "$REPO_ROOT" rev-parse --verify -q HEAD 2>/dev/null || true)
   BASE_DIR=$(git -C "$REPO_ROOT" rev-parse --absolute-git-dir 2>/dev/null || true)
   if [ -n "$BASE_SHA" ] && [ -n "$BASE_DIR" ]; then
-    printf '%s\n' "$BASE_SHA" > "$BASE_DIR/working-memory-session-base"
+    # A read-only git dir must not fail SessionStart; the nudge just falls back to HEAD.
+    { printf '%s\n' "$BASE_SHA" > "$BASE_DIR/working-memory-session-base"; } 2>/dev/null || true
   fi
 fi
 
