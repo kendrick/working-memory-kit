@@ -1,6 +1,6 @@
 # Decision Log
 
-Append-only; newest entry on top. Never edit a past entry's body. To retire one, set `status: superseded` and `superseded_by:` in the lines under its heading.
+Append-only; newest entry on top. Never edit a past entry's body. To mark an entry superseded, add `status: superseded` and `superseded_by:` lines directly under its heading.
 
 <!-- Format: -->
 <!-- ## YYYY-MM-DD: Short title -->
@@ -10,6 +10,6 @@ Append-only; newest entry on top. Never edit a past entry's body. To retire one,
 <!-- **Context:** Why this came up. -->
 <!-- **Decision:** What was decided. -->
 <!-- **Alternatives considered:** What was rejected, and why. -->
-<!-- Optional lines go directly under the heading, with no blank line above them: `status:` accepted or superseded, and `superseded_by:` with the full heading of the replacing entry. `ltm promote` writes `promoted_to:`; don't edit an entry that has one. -->
+<!-- Optional key lines go directly under the heading, with no blank line above them: `status:` (accepted or superseded) and `superseded_by:` (the new entry's heading, without `## `). `ltm promote` adds a `promoted_to:` line when it moves an entry to the Bank; don't edit an entry that has one. -->
 
 _No decisions logged yet._

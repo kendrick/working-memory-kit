@@ -22,27 +22,26 @@ When this skill is activated, perform the following:
 | File | Update policy |
 |---|---|
 | `activeContext.md` | Queue, not archive. Evict completed items. ≤20 lines. |
-| `decisionLog.md` | Append only. Never edit a past entry's body. To retire one, set `status: superseded` and `superseded_by:` in the lines under its heading. Most recent at top. |
+| `decisionLog.md` | Append only. Never edit a past entry's body. To mark an entry superseded, add `status: superseded` and `superseded_by:` lines directly under its heading. Most recent at top. |
 | `projectOverview.md` | Update only when project shape changes (stack, structure). |
 | `dataContracts.md` | Update when interfaces, schemas, or API shapes change. |
 | `conventions.md` | Update when a new pattern emerges or an old one is deprecated. |
 | `openQuestions.md` | Remove answered questions (move answers to decision log). |
-| `antipatterns.md` | Append only. Never edit a past entry's body. To retire one, set `status: superseded` and `superseded_by:` in the lines under its heading. Add an entry when an approach was tried and abandoned; include a specific "Don't suggest" line so future agents avoid re-proposing it. |
+| `antipatterns.md` | Append only. Never edit a past entry's body. To mark an entry superseded, add `status: superseded` and `superseded_by:` lines directly under its heading. Add an entry when an approach was tried and abandoned; include a specific "Don't suggest" line so future agents avoid re-proposing it. |
 
 ## Entry headings
 
 Start each entry in `decisionLog.md` and `antipatterns.md` with `## YYYY-MM-DD: Title`: ISO date, colon, space, title, no brackets. For example, `## 2026-10-01: Cap retries at three per request`. `ltm promote --entry` (from the [long-term-memory-kit](https://github.com/kendrick/long-term-memory-kit)) matches a bare title only on this shape.
 
-## Superseding an entry
+## Superseding an Entry
 
 When a new entry replaces an old one in `decisionLog.md` or `antipatterns.md`, follow these steps in order.
 
-1. Check the old entry's block for a `promoted_to:` line, including the `- promoted_to:` and `**promoted_to:**` forms. If it has one, don't touch the entry. Write the new entry, then tell the user the old one now lives in the Bank under that Record id and changes only through a Bank PR.
-2. Otherwise, write the new entry on top. In the old entry, set `status: superseded` (replacing a `status:` line already in the block under the heading) and add `superseded_by:` with the new entry's full heading text, without the `## `.
-3. If the replacing entry is in the other log, name that file in the proposal to the user.
-4. Treat an entry with no `status:` line as `accepted`.
+1. Check the old entry for a `promoted_to:` line in any of its forms: `promoted_to:`, `- promoted_to:`, or `**promoted_to:**`. If the old entry has one, leave it alone. Write the new entry, then tell the user that the old one lives in the Bank under that Record id and changes only through a Bank PR.
+2. Otherwise, write the new entry on top. In the old entry, set `status: superseded`, replacing any `status:` line already under the heading. Then add `superseded_by:` followed by the new entry's full heading, without the leading `## `.
+3. If the new entry is in the other log, name that file in the proposal to the user.
 
-Put both lines directly under the old heading, as plain `key: value` with no bold and no bullets. If the old entry already has a blank line under its heading, insert the lines above it so that blank line becomes the separator, and add no blank line inside the block. Leave the body as it is.
+Put both lines directly under the old heading as plain `key: value` lines, with no bold, no bullets, and no blank line above them. When a blank line already follows the heading, insert the lines between the heading and that blank line, which then separates them from the body. Leave the body as it is. An entry with no `status:` line reads as `accepted`.
 
 ```markdown
 ## 2026-10-01: Cap retries at three per request

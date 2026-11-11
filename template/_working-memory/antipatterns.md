@@ -16,9 +16,9 @@
 <!-- The last line is the agent-targeted lever. Be specific. "Don't suggest    -->
 <!-- moving X to Y" beats "don't suggest big refactors."                       -->
 <!--                                                                            -->
-<!-- Optional lines go directly under the heading, with no blank line above     -->
-<!-- them: `status:` accepted or superseded, and `superseded_by:` with the full -->
-<!-- heading of the replacing entry. `ltm promote` writes `promoted_to:`; don't -->
-<!-- edit an entry that has one.                                                -->
+<!-- Optional key lines go directly under the heading, with no blank line above -->
+<!-- them: `status:` (accepted or superseded) and `superseded_by:` (the new     -->
+<!-- entry's heading, without `## `). `ltm promote` adds a `promoted_to:` line  -->
+<!-- when it moves an entry to the Bank; don't edit an entry that has one.      -->
 
 _No antipatterns logged yet._
