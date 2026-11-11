@@ -4,6 +4,17 @@
 
 load helpers
 
+# Count the hooks under one .claude/settings.json event whose command contains
+# a fragment. Exits 2 if the event isn't an array, so a shape regression fails loudly.
+count_hook() {
+  node -e '
+    const s = require(process.cwd() + "/.claude/settings.json");
+    const g = (s.hooks || {})[process.argv[1]] || [];
+    if (!Array.isArray(g)) process.exit(2);
+    console.log(g.flatMap(x => x.hooks || []).filter(h => (h.command || "").includes(process.argv[2])).length);
+  ' "$1" "$2"
+}
+
 setup() { setup_repo; }
 teardown() { teardown_repo; }
 
@@ -279,4 +290,35 @@ teardown() { teardown_repo; }
   run_installer_tty $'a&b\\c\n'
   grep -qF 'a&b\c/activeContext.md' '.claude/skills/update-working-memory/SKILL.md'
   grep -qF 'a&b\c/' AGENTS.md
+}
+
+@test "fresh install writes Claude Code session hooks that run (#36)" {
+  run_installer
+  [ "$(count_hook SessionStart working-memory-session-start.sh)" -eq 1 ]
+  [ "$(count_hook SessionEnd working-memory-session-end.sh)" -eq 1 ]
+  cmd="$(node -e 'console.log(require(process.cwd()+"/.claude/settings.json").hooks.SessionStart[0].hooks[0].command)')"
+  CLAUDE_PROJECT_DIR="$PWD" bash -c "$cmd" | python3 -c 'import json,sys; assert json.load(sys.stdin)["systemMessage"]'
+}
+
+@test "re-install keeps one copy of each Claude hook and a pre-existing hook (#36)" {
+  mkdir -p .claude
+  printf '%s\n' '{"permissions":{"allow":["Bash(ls)"]},"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"echo mine"}]}]}}' > .claude/settings.json
+  run_installer
+  git add -A; git commit -q -m base
+  run_installer
+  [ "$(count_hook SessionStart 'echo mine')" -eq 1 ]
+  [ "$(count_hook SessionStart working-memory-session-start.sh)" -eq 1 ]
+  [ "$(count_hook SessionEnd working-memory-session-end.sh)" -eq 1 ]
+  node -e 'const s=require(process.cwd()+"/.claude/settings.json"); if (s.permissions.allow[0] !== "Bash(ls)") process.exit(1)'
+  run git status --porcelain; [ -z "$output" ]
+}
+
+@test "an invalid .claude/settings.json is left alone with a warning (#36)" {
+  mkdir -p .claude
+  printf '{ "hooks": ,\n' > .claude/settings.json
+  cp .claude/settings.json "$BATS_TEST_TMPDIR/orig"
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q 'not valid JSON'
+  cmp .claude/settings.json "$BATS_TEST_TMPDIR/orig"
 }

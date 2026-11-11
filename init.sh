@@ -289,6 +289,74 @@ upsert_fenced_section() {
   esac
 }
 
+# A project's own Claude Code settings and hooks share .claude/settings.json
+# with ours, so we merge instead of copying. Kit hooks are matched by script
+# name, not the exact command, so a changed command line replaces its old entry.
+# Exit 10 = nothing changed (no rewrite, no git noise); 3 = unparseable or an
+# unexpected shape, left alone. Output is key-sorted: perl hashes have no order.
+# shellcheck disable=SC2016  # single-quoted on purpose: this is a perl program, $ENV reaches perl, not the shell
+WMK_HOOKS_PERL='
+my $json = JSON::PP->new->utf8->canonical;
+sub slurp { open my $f, "<", $_[0] or die "$_[0]: $!"; local $/; my $s = <$f>; close $f; $s }
+my $src = $json->decode(slurp($ENV{WMK_SRC}));
+my $dst = eval { $json->decode(slurp($ENV{WMK_DST})) };
+exit 3 unless ref $dst eq "HASH";
+$dst->{hooks} //= {};
+exit 3 unless ref $dst->{hooks} eq "HASH";
+for my $ev (values %{ $dst->{hooks} }) {
+    exit 3 unless ref $ev eq "ARRAY";
+    for my $g (@$ev) { exit 3 unless ref $g eq "HASH" && ref($g->{hooks} // []) eq "ARRAY"; }
+}
+my $before = $json->encode($dst);
+
+for my $event (sort keys %{ $src->{hooks} }) {
+    my $groups = $dst->{hooks}{$event} //= [];
+    for my $sg (@{ $src->{hooks}{$event} }) {
+        for my $kit (@{ $sg->{hooks} }) {
+            my ($key) = $kit->{command} =~ /(working-memory-session-(?:start|end))\./ or die "no script in kit hook";
+            my $found = 0;
+            for my $g (@$groups) {
+                my @kept;
+                for my $h (@{ $g->{hooks} || [] }) {
+                    if (ref $h eq "HASH" && ($h->{command} // "") =~ /\Q$key\E\./) {
+                        next if $found++;
+                        $h = $kit;
+                    }
+                    push @kept, $h;
+                }
+                $g->{_wmk_drop} = 1 if $g->{hooks} && @{ $g->{hooks} } && !@kept;
+                $g->{hooks} = \@kept if $g->{hooks};
+            }
+            @$groups = grep { !delete $_->{_wmk_drop} } @$groups;
+            push @$groups, { %$sg, hooks => [$kit] } unless $found;
+        }
+    }
+}
+
+exit 10 if $json->encode($dst) eq $before;
+open my $out, ">", $ENV{WMK_DST} or die "write: $!";
+print $out JSON::PP->new->utf8->pretty->space_before(0)->canonical->indent_length(2)->encode($dst);
+close $out;
+'
+
+merge_claude_hooks() {
+  local src="$1" dst="$2"
+  if [ ! -f "$dst" ]; then
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+    ok "created $dst"
+    return
+  fi
+  local rc=0
+  WMK_SRC="$src" WMK_DST="$dst" perl -MJSON::PP -e "$WMK_HOOKS_PERL" || rc=$?
+  case "$rc" in
+    0) ok "merged working-memory hooks into $dst" ;;
+    10) ;;
+    3) warn "$dst is not valid JSON (or not the settings shape Claude Code reads); left it as-is. Fix it and re-run to get the working-memory hooks." ;;
+    *) fail "could not merge working-memory hooks into $dst"; exit 1 ;;
+  esac
+}
+
 # ---------- neighbor registry (keep in sync with init.ps1) ----------
 
 # External spec-driven / memory tooling the kit should coexist with. One row
@@ -808,6 +876,8 @@ if [ -d "$KIT_ROOT/.claude/skills" ]; then
   done
 fi
 
+merge_claude_hooks "$TEMPLATE/.claude/settings.json" "$TARGET_DIR/.claude/settings.json"
+
 # ---------- Codex config ----------
 
 # Codex discovers repository skills from .agents/skills. Install from the
@@ -952,6 +1022,7 @@ for f in \
   ".claude/skills/hydrate-draft/SKILL.md" \
   ".claude/skills/hydrate-reconcile/SKILL.md" \
   ".claude/skills/hydrate-propose/SKILL.md" \
+  ".claude/settings.json" \
   ".agents/skills/update-working-memory/SKILL.md" \
   ".agents/skills/hydrate-discover/SKILL.md" \
   ".agents/skills/hydrate-extract/SKILL.md" \
