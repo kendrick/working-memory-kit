@@ -7,6 +7,7 @@
 BeforeAll {
     . (Join-Path $PSScriptRoot 'Common.ps1')
     $XREF = 'Spec-driven tooling lives in'
+    $BANKLINE = 'ltm promote moves an entry from one to the other'
 }
 
 Describe 'coexistence' {
@@ -58,6 +59,37 @@ Describe 'coexistence' {
         $out | Should -Match 'two durable-memory systems'
         Get-Content AGENTS.md -Raw | Should -Not -Match $XREF
         Get-Content '_working-memory/conventions.md' -Raw | Should -Not -Match 'coexistence:principles'
+    }
+
+    It '.ltm.yaml prints the Bank line, wires nothing, and deleting it silences the line (#38)' {
+        New-Item -ItemType File -Path '.ltm.yaml' | Out-Null
+        $out = Invoke-Installer
+        $out | Should -Match ([regex]::Escape($BANKLINE))
+        $out | Should -Match ([regex]::Escape('long-term-memory-kit (.ltm.yaml)'))
+        Get-Content AGENTS.md -Raw | Should -Not -Match $XREF
+        Get-Content '_working-memory/conventions.md' -Raw | Should -Not -Match 'coexistence:principles'
+        git add -A; git commit -q -m base
+        Invoke-Installer | Out-Null
+        git status --porcelain | Should -BeNullOrEmpty
+        Remove-Item '.ltm.yaml' -Force
+        $out = Invoke-Installer
+        $out | Should -Not -Match ([regex]::Escape($BANKLINE))
+    }
+
+    It 'memory-bank/ with no .ltm.yaml prints only the Memory Bank warning (#38)' {
+        New-Item -ItemType Directory -Path 'memory-bank' -Force | Out-Null
+        $out = Invoke-Installer
+        $out | Should -Match 'two durable-memory systems'
+        $out | Should -Not -Match ([regex]::Escape($BANKLINE))
+        $out | Should -Not -Match 'long-term-memory-kit'
+    }
+
+    It '.ltm.yaml and memory-bank/ together print both lines (#38)' {
+        New-Item -ItemType File -Path '.ltm.yaml' | Out-Null
+        New-Item -ItemType Directory -Path 'memory-bank' -Force | Out-Null
+        $out = Invoke-Installer
+        $out | Should -Match ([regex]::Escape($BANKLINE))
+        $out | Should -Match 'two durable-memory systems'
     }
 
     It 'ADRs are mentioned but wire no principles' {

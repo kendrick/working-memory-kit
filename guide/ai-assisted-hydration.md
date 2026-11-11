@@ -21,12 +21,12 @@ AI is good at:
 AI should not:
 
 - Write `activeContext.md` for you. That file is per-developer, in-the-moment, and gitignored.
-- Promote working memory notes into a memory bank without human review. See the parallel page in `memory-bank/guide/ai-assisted-hydration.md` for the receiving side.
+- Promote working memory entries into an org-level Bank without a person reviewing them. `ltm promote` opens a Proposal that people review in the Bank; see [The Bridge to a Bank](#the-bridge-to-a-bank) below.
 - Decide what stays in working memory versus what's just session noise. Working memory holds project-durable items; debugging breadcrumbs belong in commit messages, not here.
 
 ## The Pipeline
 
-Five phases. The memory-bank kit's last phase (verify) doesn't apply here; working memory isn't retrieval-funnel-shaped, since the six files are read on-demand by `AGENTS.md` guidance rather than filtered by frontmatter.
+Five phases, each ending in something a person can review, or in nothing.
 
 | Phase            | Input                                  | Output                                                                                                       |
 | ---------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -88,13 +88,17 @@ Surface drafts for human review. Standard mechanism: a single commit (or PR for 
 
 After acceptance, the `working-memory-synchronizer` agent (or `/update-working-memory`, which invokes the same skill in either Claude Code or Copilot) takes over for ongoing maintenance. Hydration is the one-time or periodic deeper job. Synchronization is the continuous sweep.
 
-## The Bridge to Memory Bank
+## The Bridge to a Bank
 
-Some working memory notes graduate into a memory bank as Decision, PolicyRule, Exception, or Context records. The signal is recurrence: a note that solves a problem you've solved on more than one project, or that recurs across teams, has earned promotion.
+An entry belongs in a Bank once it applies to more than one repo, or a team outside this repo governs it. Promote it with [long-term-memory-kit](https://github.com/kendrick/long-term-memory-kit):
 
-The promotion pipeline runs the memory-bank kit's hydration phases 2–5 with the working memory file as the source. The receiving side (how the bank governs incoming candidates) lives in `memory-bank/guide/ai-assisted-hydration.md`.
+```sh
+ltm promote _working-memory/decisionLog.md --entry "<title>"
+```
 
-The producing side: a periodic scan of working memory across projects, led by an architect, scrum master, or the project itself, flags candidates. The friction is the feature; promotion has to earn its way in, and the human gate at propose is what keeps the memory bank's signal-to-noise high.
+This opens a Proposal in the Bank and stamps the entry with a `promoted_to:` line. From then on the Bank owns the decision. [The promotion guide](https://github.com/kendrick/long-term-memory-kit/blob/main/guide/promotion.md) covers how the Bank reviews incoming Proposals.
+
+The friction is the feature. Promotion has to earn its way in, and the human review of each Proposal is what keeps the Bank's signal-to-noise high.
 
 ## What This Page Does Not Do
 
@@ -106,6 +110,6 @@ The producing side: a periodic scan of working memory across projects, led by an
 
 - the installer (`init.sh` / `init.ps1`) for the structural bootstrap
 - [README.md](../README.md) for the kit overview
-- The parallel `ai-assisted-hydration.md` in `memory-bank/` (Layer 2 hydration; receiving side of the bridge)
+- [long-term-memory-kit](https://github.com/kendrick/long-term-memory-kit) for the receiving side of the bridge
 
 [^cross-tool-skills]: VS Code Copilot reads project skills from `.github/skills/`, `.claude/skills/`, and `.agents/skills/`. See [VS Code: Use Agent Skills](https://code.visualstudio.com/docs/copilot/customization/agent-skills); [GitHub Docs: Adding agent skills for GitHub Copilot](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills).

@@ -67,6 +67,40 @@ xref_inside_fence() {
   ! grep -q 'coexistence:principles' _working-memory/conventions.md
 }
 
+BANKLINE='ltm promote moves an entry from one to the other'
+
+@test ".ltm.yaml prints the Bank line, wires nothing, and deleting it silences the line (#38)" {
+  touch .ltm.yaml
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF "$BANKLINE"
+  echo "$output" | grep -q 'long-term-memory-kit (.ltm.yaml)'
+  ! grep -q "$XREF" AGENTS.md
+  ! grep -q 'coexistence:principles' _working-memory/conventions.md
+  git add -A; git commit -q -m base
+  run_installer
+  run git status --porcelain
+  [ -z "$output" ]
+  rm .ltm.yaml
+  run run_installer
+  ! echo "$output" | grep -qF "$BANKLINE"
+}
+
+@test "memory-bank/ with no .ltm.yaml prints only the Memory Bank warning (#38)" {
+  mkdir -p memory-bank
+  run run_installer
+  echo "$output" | grep -qi 'two durable-memory systems'
+  ! echo "$output" | grep -qF "$BANKLINE"
+  ! echo "$output" | grep -q 'long-term-memory-kit'
+}
+
+@test ".ltm.yaml and memory-bank/ together print both lines (#38)" {
+  touch .ltm.yaml; mkdir -p memory-bank
+  run run_installer
+  echo "$output" | grep -qF "$BANKLINE"
+  echo "$output" | grep -qi 'two durable-memory systems'
+}
+
 @test "ADRs are mentioned but wire no principles" {
   mkdir -p docs/adr
   run run_installer
