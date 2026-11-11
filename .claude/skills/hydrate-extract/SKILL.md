@@ -16,9 +16,9 @@ When this skill is activated:
    - **Deterministic:** manifests (parse JSON/TOML), file structure (walk dirs), config files, conventional-commit prefixes
    - **AI semantic:** README prose, ADR bodies, PR descriptions
 2. For each detected fact:
-   - Identify the target file in working memory (see `hydrate-draft` mapping table)
+   - Identify the target file in working memory (see `hydrate-draft` mapping table). `scope: org` findings get no working-memory target.
    - Pull a one-sentence statement
-   - Tag `scope`: a finding is `scope: org` exactly when it names more than one repo or a governing team outside this repo's. Everything else is `scope: repo`. A repo named twice under two names is still one repo, and this repo's own team governing it doesn't count as outside.
+   - Tag `scope`: a finding is `scope: org` exactly when it names more than one repo or a governing team outside this repo's. Everything else is `scope: repo`. A repo named twice under two names is still one repo, and this repo's own team governing it doesn't count as outside. A service the finding only mentions as something called (a call target or dependency) doesn't count as naming it; it counts when the fact also holds in, or is owned by, that other repo or service.
    - Write `scope_reason`: one line naming what triggered `org` (the second repo or the outside team), or `single repo, team-owned` for `repo`
    - Note source provenance: file path, commit hash, line range
 3. Output one finding per fact as a small structured record.
@@ -46,7 +46,7 @@ findings:
     scope: repo
     scope_reason: single repo, team-owned
   - source: docs/adr/0007-shared-auth.md
-    target: decisionLog.md
+    target: none (org memory)
     statement: "Orders, billing, and checkout services all authenticate through the platform team's gateway."
     confidence: high
     scope: org

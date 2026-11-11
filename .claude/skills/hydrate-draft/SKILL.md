@@ -12,7 +12,7 @@ Input: findings from `hydrate-extract`.
 
 When this skill is activated:
 
-`scope: org` findings aren't drafted into any working-memory file; pass them to `hydrate-propose` as they are.
+`scope: org` findings aren't drafted into any working-memory file; pass them on unchanged, through `hydrate-reconcile`, to `hydrate-propose`.
 
 1. For each `scope: repo` finding, route to the right working memory file:
 

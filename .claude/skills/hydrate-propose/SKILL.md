@@ -20,10 +20,12 @@ When this skill is activated:
    - New entries in `openQuestions.md`
    - **Skip `activeContext.md`** entirely
 3. Handle `scope: org` findings, which `hydrate-draft` and `hydrate-reconcile` passed through unchanged. If none arrived, say nothing about org memory.
-   - With `.ltm.yaml` at the repo root, list them under an "Org memory candidates" heading in your output. Print one command per finding and don't run it: `ltm propose --type <Decision|PolicyRule|Exception|Context> --title "<title>" --summary "<statement>" --source-ref <source> --body-file <draft.md>`. `.ltm.yaml` is the only Bank signal; `ltm` on PATH doesn't count.
-   - Write each draft body to a file the user can review, and name it in `--body-file`. Pick `--type` from the finding: a choice is a Decision, a rule someone must follow is a PolicyRule. Leave out `--applies-to`; the user adds it.
+   - With `.ltm.yaml` at the repo root, list them under an "Org memory candidates" heading in your output. Print one command per finding and don't run it: `ltm propose --type <Decision|PolicyRule|Exception|Context> --title "<title>" --summary "<statement>" --source-ref <source> --body-file <body-file>`. `.ltm.yaml` is the only Bank signal; `ltm` on PATH doesn't count.
+   - Write a body file per finding, holding its statement, source, and scope_reason, in a temp directory outside the repo (for example from `mktemp -d`). Never stage it with the working-memory batch, and print its path with the commands. Name it in `--body-file`.
+   - `--title` is a short title taken from the statement.
+   - Pick `--type` from the finding. A choice is a Decision, and a rule someone must follow is a PolicyRule. A bounded departure from a PolicyRule is an Exception. Background that agents need but that is neither a choice nor a rule is Context. Leave out `--applies-to`; the user adds it.
    - Escape `"` in `--title` and `--summary`. Long text goes in the body file.
-   - Without `.ltm.yaml`, add each one to `openQuestions.md` as an entry, "May belong in org memory: <statement> (source: <source>; <scope_reason>)", in the same staged batch.
+   - Without `.ltm.yaml`, add each one to `openQuestions.md` as an entry, "May belong in org memory: <statement> (source: <source>; <scope_reason>)", in the same staged batch. Skip a finding whose "May belong in org memory" line is already in `openQuestions.md`, so a second run doesn't duplicate it.
 4. Write the proposed commit message: a one-line summary plus a body that lists each draft and its source provenance.
 5. For solo or small-team repos: stage the commit and leave it for the developer to review and commit.
 6. For multi-developer repos: open a PR. Tag reviewers based on CODEOWNERS or recent committers to the relevant files.
