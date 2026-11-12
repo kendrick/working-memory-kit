@@ -26,8 +26,8 @@ When this skill is activated:
    - Pick `--type` from the finding. A choice is a Decision, and a rule someone must follow is a PolicyRule. A bounded departure from a PolicyRule is an Exception. Background that agents need but that is neither a choice nor a rule is Context. Leave out `--applies-to`; the user adds it.
    - Single-quote every value in both blocks, so `$(…)` stays inert. Quote an embedded `'` by shell:
      - bash/zsh writes it as `'\''`.
-     - PowerShell writes it as `''`.
-   - Long text goes in the body file. So does any text with a `"`: keep `"` out of `--title` and `--summary` where you can, because Windows PowerShell 5.1 and pwsh 7.2 and earlier mangle an embedded `"` passed to a native program.
+     - PowerShell writes it as `''`. It does the same for each of ‘ ’ ‚ ‛, which PowerShell also reads as single quotes. bash/zsh leaves those four alone.
+   - Long text goes in the body file. So does any text with a `"`, so keep `"` out of `--title` and `--summary` where you can, because Windows PowerShell 5.1 and pwsh 7.2 and earlier mangle an embedded `"` passed to a native program.
    - Without `.ltm.yaml`, add each one to `openQuestions.md` as an entry, "May belong in org memory: <statement> (source: <source>; <scope_reason>)", in the same staged batch. Skip a finding whose "May belong in org memory" line is already in `openQuestions.md`, so a second run doesn't duplicate it.
 4. Write the proposed commit message: a one-line summary plus a body that lists each draft and its source provenance.
 5. For solo or small-team repos: stage the commit and leave it for the developer to review and commit.

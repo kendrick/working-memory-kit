@@ -1,6 +1,6 @@
 # Tests
 
-bats tests for the installer (`init.sh`) and the shell hooks. Run them with:
+bats tests for the installer (`init.sh`), the shell hooks, and the text of the `hydrate-propose` skill. Run them with:
 
 ```bash
 npx bats test/
@@ -13,6 +13,7 @@ npx bats test/
 - Claude Code hooks (in `installer.bats`): a fresh install writes the SessionStart and SessionEnd entries to `.claude/settings.json`, and the start hook runs and returns `additionalContext`; a re-install keeps a project's own hook and one copy of each kit entry, and swaps an old kit entry for the current one; the installer leaves an invalid file untouched and warns.
 - `session-start-context.bats`: what `--claude` injects into `additionalContext` (the first `MAX_LINES` lines of `activeContext.md` and the AGENTS.md on-demand table), CRLF stripping, a bad line limit, and that the plain output stays the same.
 - `hooks.bats`: the session-start `--claude` output (`additionalContext`, the size-warning condition, no `systemMessage`) and the session-end nudge: fires above threshold, stays quiet below, reports broken dataContracts pointers, and skips during an in-progress merge (the regression for the #6 fix).
+- `hydrate-propose.bats`: the skill's `SKILL.md` gives a quoting rule for each shell it prints an `ltm propose` command for (#59): `'\''` for bash/zsh, and a doubled quote for PowerShell that covers the typographic single quotes too.
 - `helpers.bash`: makes a throwaway git repo per test and runs the installer non-interactively. `run_installer_tty` drives it through a pseudo-tty (`pty_run.py`) so the interactive prompts and the Upgrade/Cancel menu are reachable; `NO_COLOR` keeps the captured output plain.
 
 The PowerShell side (`init.ps1` and the `.ps1` hooks) is covered separately in Pester on windows-latest and macos-latest. The interactive menu there uses the host's native `PromptForChoice`, so the Pester suite exercises the headless mode behavior and the machinery reconciliation rather than the menu keystrokes.
