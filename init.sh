@@ -1027,20 +1027,23 @@ fs.writeFileSync(file, out);
 EOF
 )
 
-# The first Prettier config found, then the first oxfmt config, one per line.
-# Root only. package.json counts only when it has a top-level "prettier" key.
+# Prettier 3 takes the first config it finds, and editing any other one changes
+# nothing, so walk its own search order (src/config/prettier-config/
+# config-searcher.js). package.json only counts with a "prettier" key, as there.
+# shortcut: package.yaml's "prettier" key isn't checked; add it if anyone asks.
 fmt_configs() {
   local f found=""
-  for f in .prettierrc .prettierrc.json .prettierrc.json5 .prettierrc.yaml .prettierrc.yml \
-           .prettierrc.toml .prettierrc.js .prettierrc.cjs .prettierrc.mjs \
-           prettier.config.js prettier.config.cjs prettier.config.mjs; do
-    if [ -f "$TARGET_DIR/$f" ]; then found="$f"; break; fi
-  done
-  if [ -z "$found" ] && [ -f "$TARGET_DIR/package.json" ] &&
+  if [ -f "$TARGET_DIR/package.json" ] &&
      perl -MJSON::PP -e 'local $/; my $j = eval { decode_json(<STDIN>) }; exit(ref $j eq "HASH" && exists $j->{prettier} ? 0 : 1)' \
        < "$TARGET_DIR/package.json"; then
     found="package.json"
   fi
+  [ -z "$found" ] && for f in .prettierrc .prettierrc.json .prettierrc.yml .prettierrc.yaml .prettierrc.json5 \
+           .prettierrc.js prettier.config.js .prettierrc.ts prettier.config.ts \
+           .prettierrc.mjs prettier.config.mjs .prettierrc.mts prettier.config.mts \
+           .prettierrc.cjs prettier.config.cjs .prettierrc.cts prettier.config.cts .prettierrc.toml; do
+    if [ -f "$TARGET_DIR/$f" ]; then found="$f"; break; fi
+  done
   [ -n "$found" ] && printf '%s\n' "$found"
   for f in .oxfmtrc.json .oxfmtrc.jsonc; do
     if [ -f "$TARGET_DIR/$f" ]; then printf '%s\n' "$f"; break; fi
@@ -1073,7 +1076,7 @@ if [ -n "$FORMATTER_OVERRIDE" ] || { [ -n "$TTY_FD" ] && [ -z "$(read_rc formatt
       .prettierrc|.prettierrc.json|package.json|.oxfmtrc.json)
         if command -v node >/dev/null 2>&1; then
           fmt_rc=0
-          node -e "$WMK_FMT_NODE" "$TARGET_DIR/$fmt_file" "$FMT_GLOB" </dev/null || fmt_rc=$?
+          node -e "$WMK_FMT_NODE" -- "$TARGET_DIR/$fmt_file" "$FMT_GLOB" </dev/null || fmt_rc=$?
         fi
         ;;
     esac
@@ -1081,8 +1084,9 @@ if [ -n "$FORMATTER_OVERRIDE" ] || { [ -n "$TTY_FD" ] && [ -z "$(read_rc formatt
       0) ok "added a proseWrap override for $FMT_GLOB to $fmt_file"; FMT_RESULT=added ;;
       3) info "$fmt_file already has the $FMT_GLOB override"; FMT_RESULT=added ;;
       *)
-        where="$fmt_file"; [ "$fmt_file" = package.json ] && where="the \"prettier\" key in package.json"
-        warn "couldn't edit $fmt_file safely (or node isn't on PATH). Add this override to $where by hand:"
+        fmt_where="$fmt_file"
+        [ "$fmt_file" = package.json ] && fmt_where="package.json's \"prettier\" key (or the shared config it names)"
+        warn "couldn't edit $fmt_file safely (or node isn't on PATH). Add this override to $fmt_where by hand:"
         printf '  { "overrides": [ { "files": ["%s"], "options": { "proseWrap": "preserve" } } ] }\n' "$FMT_GLOB"
         ;;
     esac

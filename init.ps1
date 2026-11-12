@@ -915,21 +915,26 @@ if (text.includes('\r\n')) out = out.replace(/\n/g, '\r\n');
 fs.writeFileSync(file, out);
 '@
 
-# The first Prettier config found, then the first oxfmt config. Root only.
-# package.json counts only when it has a top-level "prettier" key.
+# Prettier 3 takes the first config it finds, and editing any other one changes
+# nothing, so walk its own search order (src/config/prettier-config/
+# config-searcher.js). package.json only counts with a "prettier" key, as there.
+# shortcut: package.yaml's "prettier" key isn't checked; add it if anyone asks.
 function Get-FmtConfigs {
     $found = @()
-    foreach ($f in '.prettierrc', '.prettierrc.json', '.prettierrc.json5', '.prettierrc.yaml', '.prettierrc.yml',
-                   '.prettierrc.toml', '.prettierrc.js', '.prettierrc.cjs', '.prettierrc.mjs',
-                   'prettier.config.js', 'prettier.config.cjs', 'prettier.config.mjs') {
-        if (Test-Path -LiteralPath (Join-Path $TargetDir $f) -PathType Leaf) { $found += $f; break }
-    }
     $pkg = Join-Path $TargetDir 'package.json'
-    if (-not $found -and (Test-Path -LiteralPath $pkg -PathType Leaf)) {
+    if (Test-Path -LiteralPath $pkg -PathType Leaf) {
         try {
             $j = Get-Content -LiteralPath $pkg -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
             if ($j -is [System.Management.Automation.PSCustomObject] -and ($j.PSObject.Properties.Name -ccontains 'prettier')) { $found += 'package.json' }
         } catch { }
+    }
+    if (-not $found) {
+        foreach ($f in '.prettierrc', '.prettierrc.json', '.prettierrc.yml', '.prettierrc.yaml', '.prettierrc.json5',
+                       '.prettierrc.js', 'prettier.config.js', '.prettierrc.ts', 'prettier.config.ts',
+                       '.prettierrc.mjs', 'prettier.config.mjs', '.prettierrc.mts', 'prettier.config.mts',
+                       '.prettierrc.cjs', 'prettier.config.cjs', '.prettierrc.cts', 'prettier.config.cts', '.prettierrc.toml') {
+            if (Test-Path -LiteralPath (Join-Path $TargetDir $f) -PathType Leaf) { $found += $f; break }
+        }
     }
     foreach ($f in '.oxfmtrc.json', '.oxfmtrc.jsonc') {
         if (Test-Path -LiteralPath (Join-Path $TargetDir $f) -PathType Leaf) { $found += $f; break }
@@ -962,8 +967,8 @@ if ($FormatterOverride -or ($fmtInteractive -and -not (Get-RcKey 'formatter_over
             0 { Write-Ok "added a proseWrap override for $FmtGlob to $fmtFile"; $FmtResult = 'added' }
             3 { Write-Info "$fmtFile already has the $FmtGlob override"; $FmtResult = 'added' }
             default {
-                $where = if ($fmtFile -eq 'package.json') { 'the "prettier" key in package.json' } else { $fmtFile }
-                Write-Warn "couldn't edit $fmtFile safely (or node isn't on PATH). Add this override to $where by hand:"
+                $fmtWhere = if ($fmtFile -eq 'package.json') { 'package.json''s "prettier" key (or the shared config it names)' } else { $fmtFile }
+                Write-Warn "couldn't edit $fmtFile safely (or node isn't on PATH). Add this override to $fmtWhere by hand:"
                 Write-Host "  { `"overrides`": [ { `"files`": [`"$FmtGlob`"], `"options`": { `"proseWrap`": `"preserve`" } } ] }"
             }
         }

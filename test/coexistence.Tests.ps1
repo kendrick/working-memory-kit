@@ -253,11 +253,21 @@ Describe 'formatter override' {
         $lines[-2..-1] | Should -Be @("`t`"version`": `"1.0.0`"", '}')
     }
 
+    It 'a package.json prettier key beats .prettierrc, as in Prettier (#44)' {
+        Set-Content package.json "{`n  `"name`": `"demo`",`n  `"prettier`": {}`n}"
+        Set-Content .prettierrc '{"proseWrap":"always"}'
+        $before = Get-Content .prettierrc -Raw
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override package.json prettier | Should -Be "1 $FMT_GLOB preserve"
+        Get-Content .prettierrc -Raw | Should -BeExactly $before
+    }
+
     It 'a string prettier key in package.json prints the snippet and edits nothing (#44)' {
         Set-Content package.json "{`n  `"name`": `"demo`",`n  `"prettier`": `"@acme/prettier-config`"`n}"
         $before = Get-Content package.json -Raw
         $out = Invoke-Installer --formatter-override
         $out | Should -Match ([regex]::Escape('"proseWrap": "preserve"'))
+        $out | Should -Match 'or the shared config it names'
         Get-Content package.json -Raw | Should -BeExactly $before
         Test-RcHasFmtKey | Should -BeFalse
     }

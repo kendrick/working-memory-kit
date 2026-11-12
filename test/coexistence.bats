@@ -263,7 +263,7 @@ rc_has_fmt_key() { grep -qs '^formatter_override=' .working-memoryrc; }
   [ "$(echo "$output" | grep -c 'Add an override')" -eq 0 ]
   run git status --porcelain
   [ -z "$output" ]
-  run_installer --formatter-override           # the flag re-applies, and finds the entry already there
+  run_installer --formatter-override           # a flag skips the recorded answer, so this reaches the edit
   run git status --porcelain
   [ -z "$output" ]
   [ "$(override_of .prettierrc)" = "1 $FMT_GLOB preserve" ]
@@ -290,12 +290,34 @@ rc_has_fmt_key() { grep -qs '^formatter_override=' .working-memoryrc; }
   diff "$BATS_TEST_TMPDIR/outside" <(outside_prettier package.json)
 }
 
+@test "a package.json prettier key beats .prettierrc, as in Prettier (#44)" {
+  printf '{\n  "name": "demo",\n  "prettier": {}\n}\n' > package.json
+  printf '{"proseWrap":"always"}\n' > .prettierrc
+  cp .prettierrc "$BATS_TEST_TMPDIR/before"
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of package.json prettier)" = "1 $FMT_GLOB preserve" ]
+  cmp .prettierrc "$BATS_TEST_TMPDIR/before"
+  # The edited file has to be the one Prettier itself loads.
+  if command -v npx >/dev/null; then
+    [ "$(npx --yes prettier@3 --find-config-path _working-memory/decisionLog.md)" = package.json ]
+  fi
+}
+
+@test "init.sh and init.ps1 embed the same formatter node script (#44)" {
+  sed -n "/^WMK_FMT_NODE=\$(cat <<'EOF'\$/,/^EOF\$/p" "$KIT_ROOT/init.sh" | sed '1d;$d' > sh.js
+  sed -n "/^\$WmkFmtNode = @'\$/,/^'@\$/p" "$KIT_ROOT/init.ps1" | sed '1d;$d' > ps.js
+  [ -s sh.js ]
+  diff sh.js ps.js
+}
+
 @test "a string prettier key in package.json prints the snippet and edits nothing (#44)" {
   printf '{\n  "name": "demo",\n  "prettier": "@acme/prettier-config"\n}\n' > package.json
   cp package.json "$BATS_TEST_TMPDIR/before"
   run run_installer --formatter-override
   [ "$status" -eq 0 ]
   echo "$output" | grep -qF '"proseWrap": "preserve"'
+  echo "$output" | grep -qF 'or the shared config it names'
   cmp package.json "$BATS_TEST_TMPDIR/before"
   run rc_has_fmt_key
   [ "$status" -ne 0 ]
