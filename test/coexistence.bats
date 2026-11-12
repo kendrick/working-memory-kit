@@ -205,3 +205,155 @@ BANKLINE='ltm promote moves an entry from one to the other'
   grep -q 'docs/my specs/' AGENTS.md
   [ "$(grep -c $'\r' AGENTS.md)" -eq 0 ]
 }
+
+# --- #44: a formatter override that keeps the working-memory dir's metadata lines ---
+
+FMT_GLOB='_working-memory/**/*.md'
+
+# "<count> <files[0]> <proseWrap>" for the overrides array in $1, under the
+# "prettier" key when $2 says so. One string, so a duplicate shows up as a count.
+override_of() {
+  node -e '
+    const fs = require("fs");
+    let j = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    if (process.argv[2]) j = j[process.argv[2]];
+    const o = j.overrides;
+    console.log(o.length + " " + o[0].files[0] + " " + o[0].options.proseWrap);
+  ' "$1" "${2:-}"
+}
+
+# bash -e ignores a bare `! cmd` mid-test, so negative checks go through run.
+rc_has_fmt_key() { grep -qs '^formatter_override=' .working-memoryrc; }
+
+@test ".prettierrc gets the override after a yes (#44)" {
+  printf '{"proseWrap":"always"}\n' > .prettierrc
+  run run_installer_tty $'\ny\n'
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF '.prettierrc formats Markdown. Add an override so it keeps _working-memory/ metadata lines as written?'
+  [ "$(override_of .prettierrc)" = "1 $FMT_GLOB preserve" ]
+  grep -qx 'formatter_override=added' .working-memoryrc
+}
+
+@test ".prettierrc is unchanged after a no (#44)" {
+  printf '{"proseWrap":"always"}\n' > .prettierrc
+  cp .prettierrc "$BATS_TEST_TMPDIR/before"
+  run run_installer_tty $'\nn\n'
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF 'Add an override'
+  cmp .prettierrc "$BATS_TEST_TMPDIR/before"
+  grep -qx 'formatter_override=declined' .working-memoryrc
+}
+
+@test ".oxfmtrc.json gets the override, from a path with a space and a quote (#44)" {
+  mkdir "it's here"
+  cd "it's here"
+  printf '{}\n' > .oxfmtrc.json
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of .oxfmtrc.json)" = "1 $FMT_GLOB preserve" ]
+  grep -qx 'formatter_override=added' .working-memoryrc
+}
+
+@test "a re-run doesn't duplicate the override or ask again (#44)" {
+  printf '{"proseWrap":"always"}\n' > .prettierrc
+  run_installer --formatter-override
+  git add -A; git commit -q -m base
+  run run_installer_tty $'\nu\n'
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | grep -c 'Add an override')" -eq 0 ]
+  run git status --porcelain
+  [ -z "$output" ]
+  run_installer --formatter-override           # the flag re-applies, and finds the entry already there
+  run git status --porcelain
+  [ -z "$output" ]
+  [ "$(override_of .prettierrc)" = "1 $FMT_GLOB preserve" ]
+}
+
+@test "--no-formatter-override records declined and edits nothing (#44)" {
+  printf '{"proseWrap":"always"}\n' > .prettierrc
+  cp .prettierrc "$BATS_TEST_TMPDIR/before"
+  run run_installer --no-formatter-override
+  [ "$status" -eq 0 ]
+  cmp .prettierrc "$BATS_TEST_TMPDIR/before"
+  grep -qx 'formatter_override=declined' .working-memoryrc
+}
+
+@test "package.json prettier object gets the override, tabs kept (#44)" {
+  printf '{\n\t"name": "demo",\n\t"prettier": {\n\t\t"semi": false\n\t},\n\t"version": "1.0.0"\n}\n' > package.json
+  outside_prettier() { awk '/^\t"prettier"/{s=1} !s{print} s&&/^\t}/{s=0}' "$1"; }
+  outside_prettier package.json > "$BATS_TEST_TMPDIR/outside"
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of package.json prettier)" = "1 $FMT_GLOB preserve" ]
+  grep -q $'^\t\t"semi": false,$' package.json
+  grep -q $'^\t\t"overrides": \\[$' package.json
+  diff "$BATS_TEST_TMPDIR/outside" <(outside_prettier package.json)
+}
+
+@test "a string prettier key in package.json prints the snippet and edits nothing (#44)" {
+  printf '{\n  "name": "demo",\n  "prettier": "@acme/prettier-config"\n}\n' > package.json
+  cp package.json "$BATS_TEST_TMPDIR/before"
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF '"proseWrap": "preserve"'
+  cmp package.json "$BATS_TEST_TMPDIR/before"
+  run rc_has_fmt_key
+  [ "$status" -ne 0 ]
+}
+
+@test "a YAML .prettierrc prints the snippet and edits nothing (#44)" {
+  printf 'proseWrap: always\n' > .prettierrc
+  cp .prettierrc "$BATS_TEST_TMPDIR/before"
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qF '"proseWrap": "preserve"'
+  cmp .prettierrc "$BATS_TEST_TMPDIR/before"
+  run rc_has_fmt_key
+  [ "$status" -ne 0 ]
+}
+
+@test "a custom dir gets its own glob (#44)" {
+  printf 'WORKING_MEMORY_DIR="mem"\n' > .working-memoryrc
+  printf '{}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of .prettierrc)" = "1 mem/**/*.md preserve" ]
+}
+
+@test "headless with no flag skips the override (#44)" {
+  printf '{"proseWrap":"always"}\n' > .prettierrc
+  cp .prettierrc "$BATS_TEST_TMPDIR/before"
+  run run_installer
+  [ "$status" -eq 0 ]
+  cmp .prettierrc "$BATS_TEST_TMPDIR/before"
+  [ "$(echo "$output" | grep -c 'Add an override')" -eq 0 ]
+  run rc_has_fmt_key
+  [ "$status" -ne 0 ]
+}
+
+@test "prettier keeps metadata lines under the override (#44)" {
+  command -v npx >/dev/null || skip "npx not available"
+  printf '{"proseWrap":"always"}\n' > .prettierrc
+  run_installer --formatter-override
+  cat > _working-memory/decisionLog.md <<'EOF'
+# Decision Log
+
+## 2026-11-12: Keep metadata lines intact
+status: superseded
+superseded_by: 2026-11-13: Keep metadata lines intact, take two
+
+**Context:** A formatter running with proseWrap set to always joins consecutive lines of one paragraph, which would fold these metadata lines into a single line that no reader or hook can parse.
+EOF
+  cp _working-memory/decisionLog.md "$BATS_TEST_TMPDIR/before"
+  # Not cmp: Prettier 3 always puts a blank line under the heading, override or
+  # not. The override's job is keeping each metadata line whole.
+  npx --yes prettier@3 --write _working-memory/decisionLog.md
+  grep -qx 'status: superseded' _working-memory/decisionLog.md
+  grep -qx 'superseded_by: 2026-11-13: Keep metadata lines intact, take two' _working-memory/decisionLog.md
+  # Without the override the same run must join them, or this test proves nothing.
+  cp "$BATS_TEST_TMPDIR/before" _working-memory/decisionLog.md
+  printf '{"proseWrap":"always"}\n' > .prettierrc
+  npx --yes prettier@3 --write _working-memory/decisionLog.md
+  run grep -qx 'status: superseded' _working-memory/decisionLog.md
+  [ "$status" -ne 0 ]
+}
