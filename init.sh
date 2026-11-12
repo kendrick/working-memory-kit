@@ -471,6 +471,8 @@ set_rc_key() {
   if [ -f "$file" ] && grep -qE "^${key}=" "$file"; then
     WMK_KEY="$key" WMK_NEW="$key=$value" perl -i -pe 's/^\Q$ENV{WMK_KEY}\E=.*$/$ENV{WMK_NEW}/' "$file"
   else
+    # An rc last edited by a tool that drops the final newline would glue the key onto its last line.
+    [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ] && printf '\n' >> "$file"
     printf '%s=%s\n' "$key" "$value" >> "$file"
   fi
 }

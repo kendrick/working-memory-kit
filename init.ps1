@@ -421,6 +421,11 @@ function Set-RcKey ($key, $value) {
         $content = Get-Content $file | ForEach-Object { if ($_ -match "^$key=") { $newLine } else { $_ } }
         Set-Content -Path $file -Value $content
     } else {
+        # An rc last edited by a tool that drops the final newline would glue the key onto its last line.
+        if (Test-Path $file) {
+            $raw = Get-Content $file -Raw
+            if ($raw -and -not $raw.EndsWith("`n")) { Add-Content -Path $file -Value '' }
+        }
         Add-Content -Path $file -Value $newLine
     }
 }

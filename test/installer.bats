@@ -206,6 +206,28 @@ teardown() { teardown_repo; }
   run find . -name '*.kitnew'; [ -z "$output" ]
 }
 
+@test "custom dir lands on its own line in an rc with no trailing newline (#50)" {
+  printf 'MAX_ACTIVE_CONTEXT_LINES=25' > .working-memoryrc
+  run_installer_tty $'mem\n'
+  grep -qx 'MAX_ACTIVE_CONTEXT_LINES=25' .working-memoryrc
+  grep -qx 'WORKING_MEMORY_DIR="mem"' .working-memoryrc
+  run_installer                                  # headless re-run
+  [ ! -d _working-memory ]
+}
+
+@test "an rc that ends in a newline gets no blank line (#50)" {
+  printf 'MAX_ACTIVE_CONTEXT_LINES=25\n' > .working-memoryrc
+  run_installer_tty $'mem\n'
+  grep -qx 'WORKING_MEMORY_DIR="mem"' .working-memoryrc
+  if grep -qx '' .working-memoryrc; then false; fi
+}
+
+@test "an empty rc gets the key with no blank line (#50)" {
+  : > .working-memoryrc
+  run_installer_tty $'mem\n'
+  [ "$(head -1 .working-memoryrc)" = 'WORKING_MEMORY_DIR="mem"' ]
+}
+
 @test "deleting WORKING_MEMORY_DIR sends a headless re-run to _working-memory (#43)" {
   run_installer_tty $'mem\n'
   grep -qx 'WORKING_MEMORY_DIR="mem"' .working-memoryrc
