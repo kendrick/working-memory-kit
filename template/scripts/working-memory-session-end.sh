@@ -113,7 +113,47 @@ json_escape() {
   printf '%s' "$s"
 }
 
+# #33: a Bank-connected repo (.ltm.yaml at the root) that gained a decisionLog
+# `## ` heading since BASE gets the ltm promote command to copy. "New" means
+# the whole heading line is absent at BASE, so edits under an existing entry
+# and moved headings stay quiet. The hook only prints the command; it never
+# runs ltm.
+PROMOTE=""
+DL_FILE="$REPO_ROOT/_working-memory/decisionLog.md"
+if [ -f "$REPO_ROOT/.ltm.yaml" ] && [ -f "$DL_FILE" ]; then
+  OLD_HEADS=$(git -C "$REPO_ROOT" show "$BASE:_working-memory/decisionLog.md" 2>/dev/null | tr -d '\r' | grep '^## ' || true)
+  # Date-prefixed headings reduce to the bare title, the form `ltm promote
+  # --entry` accepts (long-term-memory-kit #99); anything else keeps its text.
+  date_re='^## [0-9]{4}-[0-9]{2}-[0-9]{2}: (.+)$'
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    if [ -n "$OLD_HEADS" ] && printf '%s\n' "$OLD_HEADS" | grep -qxF -- "$line"; then
+      continue
+    fi
+    if [[ $line =~ $date_re ]]; then
+      title="${BASH_REMATCH[1]}"
+    else
+      title="${line#\#\# }"
+    fi
+    # The printed command gets pasted into a shell: a title with expansion
+    # syntax must reach ltm literally, so it goes single-quoted.
+    # Quote chars live in variables: bash 3.2 and 5 disagree on quoting inside ${//}.
+    sq="'"; sq_esc="'\\''"
+    case $title in
+      *[\"\$\`\\!]*) entry="'${title//$sq/$sq_esc}'" ;;
+      *) entry="\"$title\"" ;;
+    esac
+    PROMOTE="${PROMOTE}${PROMOTE:+$'\n'}working-memory: new decisionLog entry \"$title\". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry $entry"
+  done < <(tr -d '\r' < "$DL_FILE" | grep '^## ' || true)
+fi
+
+msg=""
 if [ -n "$REASON" ]; then
   msg="You changed $REASON this session.${EXTRA} Use the update-working-memory skill or the supplied update script to keep working memory current."
+fi
+if [ -n "$PROMOTE" ]; then
+  msg="${msg}${msg:+$'\n'}${PROMOTE}"
+fi
+if [ -n "$msg" ]; then
   printf '{"systemMessage":"%s"}\n' "$(json_escape "$msg")"
 fi

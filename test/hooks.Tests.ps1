@@ -81,6 +81,132 @@ Describe 'session-end hook' {
         ($out | ConvertFrom-Json).systemMessage | Should -BeLike "*AGENTS.md's*"
     }
 
+    # #33: nudge toward `ltm promote` when a Bank-connected repo gains a decisionLog entry.
+    Context 'ltm promote nudge (#33)' {
+        BeforeEach {
+            Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=50`nNUDGE_LINE_THRESHOLD=5000"
+            Set-Content .ltm.yaml 'bank: x'
+            $start = Join-Path $KitRoot 'template/scripts/working-memory-session-start.ps1'
+        }
+        # Defined here so the tests compare against the spec text, not the script's own template.
+        BeforeAll {
+            function Get-PromoteLine ($title) {
+                "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry `"$title`""
+            }
+        }
+
+        It 'session-end prints an ltm promote line per new decisionLog entry when .ltm.yaml exists (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "# Decision Log`n`n## 2026-11-01: Cap retries at three per request`n`nbody`n`n## 2026-11-02: Drop the v1 API`n"
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            $msg | Should -BeExactly ((Get-PromoteLine 'Cap retries at three per request') + "`n" + (Get-PromoteLine 'Drop the v1 API'))
+        }
+
+        It 'the promote nudge counts an entry committed during the session (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap retries at three per request`n"
+            git add -A; git commit -q -m work
+            (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage | Should -BeExactly (Get-PromoteLine 'Cap retries at three per request')
+        }
+
+        It 'no .ltm.yaml, no promote line (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap retries at three per request`n"
+            Remove-Item .ltm.yaml -Force -ErrorAction Stop
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'a new heading in conventions.md prints nothing (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/conventions.md' "## 2026-11-01: Cap retries at three per request`n"
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It "editing an existing entry's body prints nothing (#33)" {
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap retries at three per request`n`nbody`n"
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Add-Content '_working-memory/decisionLog.md' 'more body'
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'a heading whose only change is case reads as new (#33)' {
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap Retries`n"
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: cap retries`n"
+            (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage | Should -BeExactly (Get-PromoteLine 'cap retries')
+        }
+
+        # Passes on pwsh 7 regardless; guards 5.1, where git show is decoded with the OEM code page.
+        It 'a non-ASCII heading with a body-only edit prints nothing (#33)' {
+            Set-Content '_working-memory/decisionLog.md' "# Decision Log`n`n## 2026-10-01: Caf$([char]0xE9) policy`n`nbody`n" -Encoding UTF8
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Add-Content '_working-memory/decisionLog.md' 'more body' -Encoding UTF8
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'the promote line keeps the JSON valid with a quote in the title (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Use `"at most once`" delivery`n"
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            # --entry is single-quoted because the title holds a double quote.
+            $msg | Should -BeExactly 'working-memory: new decisionLog entry "Use "at most once" delivery". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry ''Use "at most once" delivery'''
+        }
+
+        It 'a title with shell expansion syntax prints a single-quoted entry (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' '## 2026-11-01: Keep $HOME private'
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            $msg | Should -BeExactly 'working-memory: new decisionLog entry "Keep $HOME private". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry ''Keep $HOME private'''
+            function ltm { $args[3] }
+            Invoke-Expression ($msg -replace '^.*If it applies beyond this repo: ', '') | Should -BeExactly 'Keep $HOME private'
+        }
+
+        It 'a title with an apostrophe and a dollar sign round-trips (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' '## 2026-11-01: Don''t expand $HOME'
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            $msg | Should -BeExactly 'working-memory: new decisionLog entry "Don''t expand $HOME". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry ''Don''''t expand $HOME'''
+            function ltm { $args[3] }
+            Invoke-Expression ($msg -replace '^.*If it applies beyond this repo: ', '') | Should -BeExactly 'Don''t expand $HOME'
+        }
+
+        It 'a title with curly quotes round-trips (#33)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            # Curly quotes are PowerShell quote delimiters; built from code points to keep this file ASCII.
+            $apos = [char]0x2019; $lq = [char]0x201C; $rq = [char]0x201D
+            $title = "It${apos}s ${lq}`$x${rq}"
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: $title"
+            $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
+            $msg | Should -BeExactly "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'It${apos}${apos}s ${lq}`$x${rq}'"
+            function ltm { $args[3] }
+            Invoke-Expression ($msg -replace '^.*If it applies beyond this repo: ', '') | Should -BeExactly $title
+        }
+
+        It 'the promote line follows the size nudge when both fire (#33)' {
+            Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=1`nNUDGE_LINE_THRESHOLD=1"
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap retries at three per request`n"
+            Set-Content f1.txt 'a'; Set-Content f2.txt 'b'
+            git add -A
+            $lines = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage -split "`n"
+            $lines.Count | Should -Be 2
+            $lines[0] | Should -BeExactly 'You changed 3 files and 4 lines this session. Use the update-working-memory skill or the supplied update script to keep working memory current.'
+            $lines[1] | Should -BeExactly (Get-PromoteLine 'Cap retries at three per request')
+        }
+    }
+
     # #35: the nudge counts everything since the commit recorded at session start.
     Context 'base recorded at session start (#35)' {
         BeforeEach {

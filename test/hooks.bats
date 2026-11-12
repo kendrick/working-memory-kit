@@ -256,3 +256,153 @@ make_files() {
   chmod 600 "$base"
   [ "$status" -eq 0 ]
 }
+
+# #33: a Bank-connected repo (.ltm.yaml) that gains a decisionLog entry gets
+# the ltm promote command. Thresholds are high so the size nudge stays off.
+ltm_setup() {
+  printf 'NUDGE_FILE_THRESHOLD=50\nNUDGE_LINE_THRESHOLD=5000\n' > .working-memoryrc
+  printf 'bank: x\n' > .ltm.yaml
+}
+
+# Decoded systemMessage, so the assertions see what the host would show.
+sysmsg() {
+  printf '%s' "$output" | python3 -c 'import json,sys; print(json.load(sys.stdin)["systemMessage"])'
+}
+
+promote_line() {
+  printf 'working-memory: new decisionLog entry "%s". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry "%s"' "$1" "$1"
+}
+
+@test "session-end prints an ltm promote line per new decisionLog entry when .ltm.yaml exists (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Cap retries at three per request\n\nbody\n\n## 2026-11-02: Drop the v1 API\n' > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  expected="$(promote_line 'Cap retries at three per request')
+$(promote_line 'Drop the v1 API')"
+  [ "$(sysmsg)" = "$expected" ]
+}
+
+@test "the promote nudge counts an entry committed during the session (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Cap retries at three per request\n' > _working-memory/decisionLog.md
+  git add -A
+  git commit -q -m work
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "$(promote_line 'Cap retries at three per request')" ]
+}
+
+@test "no .ltm.yaml, no promote line (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Cap retries at three per request\n' > _working-memory/decisionLog.md
+  rm .ltm.yaml
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a new heading in conventions.md prints nothing (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Cap retries at three per request\n' > _working-memory/conventions.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "editing an existing entry's body prints nothing (#33)" {
+  ltm_setup
+  printf '## 2026-10-01: Use SQLite\n\nbody\n' > _working-memory/decisionLog.md
+  commit_base
+  bash "$START" </dev/null
+  printf 'more reasoning\n' >> _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a heading whose only change is case reads as new (#33)" {
+  ltm_setup
+  printf '## 2026-11-01: Cap Retries\n' > _working-memory/decisionLog.md
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: cap retries\n' > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "$(promote_line 'cap retries')" ]
+}
+
+@test "the promote line keeps the JSON valid with a quote in the title (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Use "at most once" delivery\n' > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  # --entry is single-quoted because the title holds a double quote.
+  [ "$(sysmsg)" = "working-memory: new decisionLog entry \"Use \"at most once\" delivery\". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'Use \"at most once\" delivery'" ]
+}
+
+# Evals the printed command with a stub ltm; prints the title argument ltm would receive.
+roundtrip_entry() {
+  local cmd
+  cmd="$(sysmsg | sed 's/^.*If it applies beyond this repo: //')"
+  ltm() { printf '%s' "$4"; }
+  eval "$cmd"
+}
+
+@test "a title with shell expansion syntax prints a single-quoted entry (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Keep $HOME private\n' > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "working-memory: new decisionLog entry \"Keep \$HOME private\". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'Keep \$HOME private'" ]
+  [ "$(roundtrip_entry)" = 'Keep $HOME private' ]
+}
+
+@test "a title with an apostrophe and a dollar sign round-trips (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf "## 2026-11-01: Don't expand \$HOME\n" > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "working-memory: new decisionLog entry \"Don't expand \$HOME\". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'Don'\\''t expand \$HOME'" ]
+  [ "$(roundtrip_entry)" = "Don't expand \$HOME" ]
+}
+
+@test "a title with a backslash and a bang round-trips (#33)" {
+  ltm_setup
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Use C:\\tmp\\new, not Foo!\n' > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(roundtrip_entry)" = 'Use C:\tmp\new, not Foo!' ]
+}
+
+@test "the promote line follows the size nudge when both fire (#33)" {
+  ltm_setup
+  printf 'NUDGE_FILE_THRESHOLD=1\nNUDGE_LINE_THRESHOLD=1\n' > .working-memoryrc
+  commit_base
+  bash "$START" </dev/null
+  printf '## 2026-11-01: Cap retries at three per request\n' > _working-memory/decisionLog.md
+  printf 'a\n' > f1.txt
+  git add -A
+  git commit -q -m work
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  msg="$(sysmsg)"
+  [ "$(printf '%s\n' "$msg" | sed -n 1p)" = "You changed 2 files and 2 lines this session. Use the update-working-memory skill or the supplied update script to keep working memory current." ]
+  [ "$(printf '%s\n' "$msg" | sed -n 2p)" = "$(promote_line 'Cap retries at three per request')" ]
+}

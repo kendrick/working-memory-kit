@@ -111,9 +111,56 @@ if ($reason) {
     }
 }
 
+# #33: a Bank-connected repo (.ltm.yaml at the root) that gained a decisionLog
+# heading since the session base gets the `ltm promote` command to run. The hook
+# only prints it. "New" means the heading line is absent at $base, so an entry
+# committed mid-session still counts and body edits never do.
+$promote = @()
+$logRel = '_working-memory/decisionLog.md'
+$logFile = Join-Path $repoRoot $logRel
+if ((Test-Path (Join-Path $repoRoot '.ltm.yaml')) -and (Test-Path $logFile)) {
+    # Unreadable file (ACL, mode bits) throws under 'Stop'; treat as no entries.
+    $now = ''
+    try { $now = (Get-Content -Raw -Encoding UTF8 $logFile) + '' } catch {}
+    # A base without the file makes git show fail; relax 'Stop' for 5.1's stderr ErrorRecords.
+    $then = ''
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    # 5.1 decodes native output with the console's OEM code page while $now is
+    # UTF-8, so a non-ASCII heading would differ from itself and read as new
+    # every session. The set can throw with no console; then keep the default.
+    $prevEnc = $null
+    try { $prevEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
+    try { $then = (@(git -C $repoRoot show "${base}:$logRel" 2>$null) -join "`n") } finally {
+        $ErrorActionPreference = $prevEap
+        if ($prevEnc) { try { [Console]::OutputEncoding = $prevEnc } catch {} }
+    }
+    $heading = '^## '
+    # Case-sensitive (-c*) to match the bash twin's grep -qxF; PowerShell's
+    # default operators ignore case, so a recased heading would go unnoticed.
+    $old = @(($then -split "`n") | ForEach-Object { $_ -replace "`r", '' } | Where-Object { $_ -cmatch $heading })
+    foreach ($h in (($now -split "`n") | ForEach-Object { $_ -replace "`r", '' } | Where-Object { $_ -cmatch $heading })) {
+        if ($old -ccontains $h) { continue }
+        $title = if ($h -match '^## \d{4}-\d{2}-\d{2}: (.+)$') { $Matches[1] } else { $h.Substring(3) }
+        # The printed command gets pasted into a shell: a title with expansion
+        # syntax must reach ltm literally, so it goes single-quoted. The trigger
+        # set differs from bash's: `\` and `!` are literal inside PowerShell double
+        # quotes, while curly quotes are PowerShell quote delimiters. Escapes keep
+        # this file ASCII for Windows PowerShell 5.1 reading it as ANSI.
+        $entry = if ($title -match '["$`\u201C\u201D\u201E]') { "'" + ($title -replace "['\u2018\u2019\u201A\u201B]", '$0$0') + "'" } else { "`"$title`"" }
+        $promote += "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote $logRel --entry $entry"
+    }
+}
+
+$msg = $null
 if ($reason) {
-    # A quote or backslash in a pointer must reach the host escaped, or the
-    # host drops the message silently.
     $msg = "You changed $reason this session.$extra Use the update-working-memory skill or the supplied update script to keep working memory current."
+}
+if ($promote.Count -gt 0) {
+    $msg = (@($msg) + $promote | Where-Object { $_ }) -join "`n"
+}
+if ($msg) {
+    # A quote or backslash in a pointer or title must reach the host escaped, or
+    # the host drops the message silently.
     Write-Output ([pscustomobject]@{ systemMessage = $msg } | ConvertTo-Json -Compress)
 }
