@@ -184,6 +184,33 @@ Describe 'installer' {
         git status --porcelain | Should -BeNullOrEmpty
     }
 
+    # ---- Set-RcKey must not glue a new key onto an rc whose last line lacks a newline (#50).
+    # A headless run can't answer the dir prompt, so --no-coexist drives the append branch. ----
+
+    It 'an appended key lands on its own line in an rc with no trailing newline (#50)' {
+        [IO.File]::WriteAllText((Join-Path (Get-Location) '.working-memoryrc'), 'WORKING_MEMORY_DIR="mem"')
+        Invoke-Installer --no-coexist | Out-Null
+        $rc = Get-Content .working-memoryrc
+        $rc | Should -Contain 'WORKING_MEMORY_DIR="mem"'
+        $rc | Should -Contain 'external_spec_tooling=false'
+        Invoke-Installer | Out-Null
+        '_working-memory' | Should -Not -Exist
+    }
+
+    It 'an rc that ends in a newline gets no blank line (#50)' {
+        [IO.File]::WriteAllText((Join-Path (Get-Location) '.working-memoryrc'), "WORKING_MEMORY_DIR=`"mem`"`n")
+        Invoke-Installer --no-coexist | Out-Null
+        $rc = Get-Content .working-memoryrc
+        $rc | Should -Contain 'external_spec_tooling=false'
+        $rc | Should -Not -Contain ''
+    }
+
+    It 'an empty rc gets the key with no blank line (#50)' {
+        [IO.File]::WriteAllText((Join-Path (Get-Location) '.working-memoryrc'), '')
+        Invoke-Installer --no-coexist | Out-Null
+        @(Get-Content .working-memoryrc)[0] | Should -Be 'external_spec_tooling=false'
+    }
+
     It 'deleting WORKING_MEMORY_DIR sends a headless re-run to _working-memory (#43)' {
         Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="mem"'
         Invoke-Installer | Out-Null
