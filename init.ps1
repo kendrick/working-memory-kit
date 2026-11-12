@@ -444,11 +444,14 @@ function Test-WmDirUnsafe ($dir) {
 # --overwrite-machinery takes the shipped version of every kit-owned file
 # outright, skipping the .kitnew sidecars. Flag-only escape hatch for the Upgrade
 # flow (no menu item, no --force alias). Content files are never touched by it.
+# --formatter-override / --no-formatter-override answer the Prettier/oxfmt
+# override prompt ahead of time; a headless run with neither skips that step.
 $CoexistWith = ''
 $CoexistPrinciples = ''
 $NoCoexist = $false
 $NonInteractive = $false
 $OverwriteMachinery = $false
+$FormatterOverride = ''
 for ($i = 0; $i -lt $args.Count; $i++) {
     switch -Regex ($args[$i]) {
         '^--coexist-with=(.+)$'       { $CoexistWith = $Matches[1] }
@@ -457,6 +460,8 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         '^--coexist-principles$'      { if ($i + 1 -lt $args.Count) { $i++; $CoexistPrinciples = $args[$i] } }
         '^--no-coexist$'              { $NoCoexist = $true }
         '^--overwrite-machinery$'     { $OverwriteMachinery = $true }
+        '^--formatter-override$'      { $FormatterOverride = 'yes' }
+        '^--no-formatter-override$'   { $FormatterOverride = 'no' }
         '^--(yes|non-interactive)$'   { $NonInteractive = $true }
         default                       { Write-Warn "ignoring unknown option: $($args[$i])" }
     }
@@ -882,6 +887,89 @@ if (Test-Path $gitignore) {
     Set-Content $gitignore "# Local-only active context (working-memory-kit)`n$line"
     Write-Ok 'created .gitignore with activeContext.md entry'
 }
+
+# ---------- formatter override ----------
+
+# #39 keeps status:/superseded_by: as plain lines under a decisionLog heading. A
+# formatter running proseWrap always/never joins them into one line, so offer a
+# proseWrap preserve override scoped to the working-memory dir. The edit runs in
+# node so the file keeps its key order and indent. Exit 0 = added, 3 = already
+# there, anything else = couldn't edit safely (print the snippet).
+# Parity copy: init.sh's WMK_FMT_NODE holds this script byte for byte; change both together.
+$WmkFmtNode = @'
+const fs = require('fs');
+const path = require('path');
+const [file, glob] = process.argv.slice(1);
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+let text, root;
+try { text = fs.readFileSync(file, 'utf8'); root = JSON.parse(text); } catch (e) { process.exit(2); }
+const target = path.basename(file) === 'package.json' ? (isObj(root) ? root.prettier : null) : root;
+if (!isObj(target)) process.exit(2);
+if (target.overrides === undefined) target.overrides = [];
+if (!Array.isArray(target.overrides)) process.exit(2);
+if (target.overrides.some((o) => isObj(o) && [].concat(o.files).includes(glob))) process.exit(3);
+target.overrides.push({ files: [glob], options: { proseWrap: 'preserve' } });
+const indent = (text.match(/\n([ \t]+)\S/) || [])[1] || 2;
+let out = JSON.stringify(root, null, indent) + '\n';
+if (text.includes('\r\n')) out = out.replace(/\n/g, '\r\n');
+fs.writeFileSync(file, out);
+'@
+
+# The first Prettier config found, then the first oxfmt config. Root only.
+# package.json counts only when it has a top-level "prettier" key.
+function Get-FmtConfigs {
+    $found = @()
+    foreach ($f in '.prettierrc', '.prettierrc.json', '.prettierrc.json5', '.prettierrc.yaml', '.prettierrc.yml',
+                   '.prettierrc.toml', '.prettierrc.js', '.prettierrc.cjs', '.prettierrc.mjs',
+                   'prettier.config.js', 'prettier.config.cjs', 'prettier.config.mjs') {
+        if (Test-Path -LiteralPath (Join-Path $TargetDir $f) -PathType Leaf) { $found += $f; break }
+    }
+    $pkg = Join-Path $TargetDir 'package.json'
+    if (-not $found -and (Test-Path -LiteralPath $pkg -PathType Leaf)) {
+        try {
+            $j = Get-Content -LiteralPath $pkg -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            if ($j -is [System.Management.Automation.PSCustomObject] -and ($j.PSObject.Properties.Name -ccontains 'prettier')) { $found += 'package.json' }
+        } catch { }
+    }
+    foreach ($f in '.oxfmtrc.json', '.oxfmtrc.jsonc') {
+        if (Test-Path -LiteralPath (Join-Path $TargetDir $f) -PathType Leaf) { $found += $f; break }
+    }
+    return $found
+}
+
+# A flag always applies and records its answer. Without one, only an interactive
+# run that hasn't recorded an answer asks; Confirm-Prompt would silently take its
+# default with no console, so headless skips and leaves the question for later.
+$FmtGlob = "$WmDir/**/*.md"
+$FmtResult = ''
+$fmtInteractive = -not ($NonInteractive -or [Console]::IsInputRedirected)
+if ($FormatterOverride -or ($fmtInteractive -and -not (Get-RcKey 'formatter_override' ''))) {
+    foreach ($fmtFile in Get-FmtConfigs) {
+        $fmtAnswer = $FormatterOverride
+        if (-not $fmtAnswer) {
+            $fmtAnswer = if (Confirm-Prompt "$fmtFile formats Markdown. Add an override so it keeps $WmDir/ metadata lines as written?" $true) { 'yes' } else { 'no' }
+        }
+        if ($fmtAnswer -eq 'no') {
+            if ($FmtResult -ne 'added') { $FmtResult = 'declined' }
+            continue
+        }
+        $fmtRc = 2
+        if (($fmtFile -in '.prettierrc', '.prettierrc.json', 'package.json', '.oxfmtrc.json') -and (Get-Command node -ErrorAction SilentlyContinue)) {
+            & node -e $WmkFmtNode -- (Join-Path $TargetDir $fmtFile) $FmtGlob
+            $fmtRc = $LASTEXITCODE
+        }
+        switch ($fmtRc) {
+            0 { Write-Ok "added a proseWrap override for $FmtGlob to $fmtFile"; $FmtResult = 'added' }
+            3 { Write-Info "$fmtFile already has the $FmtGlob override"; $FmtResult = 'added' }
+            default {
+                $where = if ($fmtFile -eq 'package.json') { 'the "prettier" key in package.json' } else { $fmtFile }
+                Write-Warn "couldn't edit $fmtFile safely (or node isn't on PATH). Add this override to $where by hand:"
+                Write-Host "  { `"overrides`": [ { `"files`": [`"$FmtGlob`"], `"options`": { `"proseWrap`": `"preserve`" } } ] }"
+            }
+        }
+    }
+}
+if ($FmtResult) { Set-RcKey 'formatter_override' $FmtResult }
 
 # ---------- substitute WmDir token in copied files if user overrode default ----------
 
