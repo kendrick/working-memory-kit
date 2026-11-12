@@ -321,6 +321,14 @@ Describe 'formatter override' {
         Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
     }
 
+    It "an override with excludeFiles is not reused, so the kit's is appended last (#44)" {
+        Set-Content .prettierrc '{"proseWrap":"always","overrides":[{"files":["_working-memory/**/*.md"],"excludeFiles":["_working-memory/decisionLog.md"],"options":{"proseWrap":"preserve"}}]}'
+        Invoke-Installer --formatter-override | Out-Null
+        $o = @((Get-Content .prettierrc -Raw | ConvertFrom-Json).overrides)
+        "$($o.Count) $($o[-1].files[0]) $($o[-1].options.proseWrap) $($null -eq $o[-1].excludeFiles)" | Should -Be "2 $FMT_GLOB preserve True"
+        Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
+    }
+
     It 'headless with no flag skips the override (#44)' {
         Set-Content .prettierrc '{"proseWrap":"always"}'
         $before = Get-Content .prettierrc -Raw

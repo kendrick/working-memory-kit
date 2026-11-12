@@ -379,6 +379,14 @@ rc_has_fmt_key() { grep -qs '^formatter_override=' .working-memoryrc; }
   grep -qx 'superseded_by: later' _working-memory/decisionLog.md
 }
 
+@test "an override with excludeFiles is not reused, so the kit's is appended last (#44)" {
+  printf '{"proseWrap":"always","overrides":[{"files":["_working-memory/**/*.md"],"excludeFiles":["_working-memory/decisionLog.md"],"options":{"proseWrap":"preserve"}}]}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(node -e 'const o=JSON.parse(require("fs").readFileSync(".prettierrc","utf8")).overrides; console.log(o.length, o[o.length-1].files[0], o[o.length-1].options.proseWrap, o[o.length-1].excludeFiles)')" = "2 $FMT_GLOB preserve undefined" ]
+  grep -qx 'formatter_override=added' .working-memoryrc
+}
+
 @test "headless with no flag skips the override (#44)" {
   printf '{"proseWrap":"always"}\n' > .prettierrc
   cp .prettierrc "$BATS_TEST_TMPDIR/before"

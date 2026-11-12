@@ -1020,7 +1020,7 @@ if (target.overrides === undefined) target.overrides = [];
 if (!Array.isArray(target.overrides)) process.exit(2);
 // shortcut: matches globs by string equality, so an unrelated later proseWrap override gets ours appended again, upgrade if that ever matters.
 const last = target.overrides.filter((o) => isObj(o) && isObj(o.options) && o.options.proseWrap !== undefined).pop();
-if (last && [].concat(last.files).includes(glob) && last.options.proseWrap === 'preserve') process.exit(3);
+if (last && [].concat(last.files).includes(glob) && last.options.proseWrap === 'preserve' && last.excludeFiles === undefined) process.exit(3);
 target.overrides.push({ files: [glob], options: { proseWrap: 'preserve' } });
 const indent = (text.match(/\n([ \t]+)\S/) || [])[1] || 2;
 let out = JSON.stringify(root, null, indent) + '\n';
