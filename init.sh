@@ -1005,7 +1005,7 @@ fi
 # formatter running proseWrap always/never joins them into one line, so offer a
 # proseWrap preserve override scoped to the working-memory dir. The edit runs in
 # node, not JSON::PP, so the file keeps its key order and indent. Exit 0 = added,
-# 3 = already there, anything else = couldn't edit safely (print the snippet).
+# 3 = a preserve override is already in effect, anything else = couldn't edit safely (print the snippet).
 # Parity copy: init.ps1 embeds this script byte for byte; change both together.
 WMK_FMT_NODE=$(cat <<'EOF'
 const fs = require('fs');
@@ -1018,7 +1018,9 @@ const target = path.basename(file) === 'package.json' ? (isObj(root) ? root.pret
 if (!isObj(target)) process.exit(2);
 if (target.overrides === undefined) target.overrides = [];
 if (!Array.isArray(target.overrides)) process.exit(2);
-if (target.overrides.some((o) => isObj(o) && [].concat(o.files).includes(glob))) process.exit(3);
+// shortcut: matches globs by string equality, so an unrelated later proseWrap override gets ours appended again, upgrade if that ever matters.
+const last = target.overrides.filter((o) => isObj(o) && isObj(o.options) && o.options.proseWrap !== undefined).pop();
+if (last && [].concat(last.files).includes(glob) && last.options.proseWrap === 'preserve') process.exit(3);
 target.overrides.push({ files: [glob], options: { proseWrap: 'preserve' } });
 const indent = (text.match(/\n([ \t]+)\S/) || [])[1] || 2;
 let out = JSON.stringify(root, null, indent) + '\n';
@@ -1054,7 +1056,8 @@ fmt_configs() {
 # A flag always applies and records its answer. Without one, only an interactive
 # run that hasn't recorded an answer asks; confirm would silently take its
 # default with no tty, so headless skips and leaves the question for later.
-FMT_GLOB="$WM_DIR/**/*.md"
+# An rc or typed dir can carry Windows separators; formatter globs only match "/".
+FMT_GLOB="${WM_DIR//\\//}/**/*.md"
 FMT_RESULT=""
 if [ -n "$FORMATTER_OVERRIDE" ] || { [ -n "$TTY_FD" ] && [ -z "$(read_rc formatter_override "")" ]; }; then
   while IFS= read -r fmt_file; do
@@ -1082,7 +1085,7 @@ if [ -n "$FORMATTER_OVERRIDE" ] || { [ -n "$TTY_FD" ] && [ -z "$(read_rc formatt
     esac
     case "$fmt_rc" in
       0) ok "added a proseWrap override for $FMT_GLOB to $fmt_file"; FMT_RESULT=added ;;
-      3) info "$fmt_file already has the $FMT_GLOB override"; FMT_RESULT=added ;;
+      3) info "$fmt_file already has a proseWrap preserve override for $FMT_GLOB in effect"; FMT_RESULT=added ;;
       *)
         fmt_where="$fmt_file"
         [ "$fmt_file" = package.json ] && fmt_where="package.json's \"prettier\" key (or the shared config it names)"

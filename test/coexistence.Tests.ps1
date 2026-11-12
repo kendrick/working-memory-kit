@@ -229,7 +229,7 @@ Describe 'formatter override' {
         $out | Should -Not -Match 'Add an override'
         git status --porcelain | Should -BeNullOrEmpty
         $out = Invoke-Installer --formatter-override
-        $out | Should -Match 'already has the'
+        $out | Should -Match 'already has a proseWrap preserve override'
         git status --porcelain | Should -BeNullOrEmpty
         Get-Override .prettierrc | Should -Be "1 $FMT_GLOB preserve"
     }
@@ -294,6 +294,31 @@ Describe 'formatter override' {
         Set-Content .prettierrc '{}'
         Invoke-Installer --formatter-override | Out-Null
         Get-Override .prettierrc | Should -Be '1 mem/**/*.md preserve'
+    }
+
+    It 'a dir with a backslash gets a forward-slash glob (#44)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="docs\memory"'
+        Set-Content .prettierrc '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .prettierrc | Should -Be '1 docs/memory/**/*.md preserve'
+    }
+
+    It 'an existing override without proseWrap preserve still gets one (#44)' {
+        Set-Content .prettierrc '{"proseWrap":"always","overrides":[{"files":["_working-memory/**/*.md"],"options":{"printWidth":100}}]}'
+        Invoke-Installer --formatter-override | Out-Null
+        $o = @((Get-Content .prettierrc -Raw | ConvertFrom-Json).overrides)
+        "$($o.Count) $($o[1].files[0]) $($o[1].options.proseWrap)" | Should -Be "2 $FMT_GLOB preserve"
+        Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
+        Invoke-Installer --formatter-override | Out-Null
+        @((Get-Content .prettierrc -Raw | ConvertFrom-Json).overrides).Count | Should -Be 2
+    }
+
+    It "a later override that sets proseWrap shadows the kit's, so a new one is appended last (#44)" {
+        Set-Content .prettierrc '{"overrides":[{"files":["_working-memory/**/*.md"],"options":{"proseWrap":"preserve"}},{"files":["**/*.md"],"options":{"proseWrap":"always"}}]}'
+        Invoke-Installer --formatter-override | Out-Null
+        $o = @((Get-Content .prettierrc -Raw | ConvertFrom-Json).overrides)
+        "$($o.Count) $($o[-1].files[0]) $($o[-1].options.proseWrap)" | Should -Be "3 $FMT_GLOB preserve"
+        Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
     }
 
     It 'headless with no flag skips the override (#44)' {

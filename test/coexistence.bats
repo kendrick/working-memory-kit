@@ -342,6 +342,43 @@ rc_has_fmt_key() { grep -qs '^formatter_override=' .working-memoryrc; }
   [ "$(override_of .prettierrc)" = "1 mem/**/*.md preserve" ]
 }
 
+@test "a dir with a backslash gets a forward-slash glob (#44)" {
+  printf 'WORKING_MEMORY_DIR="docs\\memory"\n' > .working-memoryrc
+  printf '{}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of .prettierrc)" = "1 docs/memory/**/*.md preserve" ]
+}
+
+@test "an existing override without proseWrap preserve still gets one (#44)" {
+  printf '{"proseWrap":"always","overrides":[{"files":["_working-memory/**/*.md"],"options":{"printWidth":100}}]}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(node -e 'const o=JSON.parse(require("fs").readFileSync(".prettierrc","utf8")).overrides; console.log(o.length, o[1].files[0], o[1].options.proseWrap)')" = "2 $FMT_GLOB preserve" ]
+  grep -qx 'formatter_override=added' .working-memoryrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(node -e 'console.log(JSON.parse(require("fs").readFileSync(".prettierrc","utf8")).overrides.length)')" = 2 ]
+  command -v npx >/dev/null || skip "npx not available"
+  printf '# Log\n\nstatus: superseded\nsuperseded_by: later\n' > _working-memory/decisionLog.md
+  npx --yes prettier@3 --write _working-memory/decisionLog.md
+  grep -qx 'status: superseded' _working-memory/decisionLog.md
+  grep -qx 'superseded_by: later' _working-memory/decisionLog.md
+}
+
+@test "a later override that sets proseWrap shadows the kit's, so a new one is appended last (#44)" {
+  printf '{"overrides":[{"files":["_working-memory/**/*.md"],"options":{"proseWrap":"preserve"}},{"files":["**/*.md"],"options":{"proseWrap":"always"}}]}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(node -e 'const o=JSON.parse(require("fs").readFileSync(".prettierrc","utf8")).overrides; console.log(o.length, o[o.length-1].files[0], o[o.length-1].options.proseWrap)')" = "3 $FMT_GLOB preserve" ]
+  grep -qx 'formatter_override=added' .working-memoryrc
+  command -v npx >/dev/null || skip "npx not available"
+  printf '# Log\n\nstatus: superseded\nsuperseded_by: later\n' > _working-memory/decisionLog.md
+  npx --yes prettier@3 --write _working-memory/decisionLog.md
+  grep -qx 'status: superseded' _working-memory/decisionLog.md
+  grep -qx 'superseded_by: later' _working-memory/decisionLog.md
+}
+
 @test "headless with no flag skips the override (#44)" {
   printf '{"proseWrap":"always"}\n' > .prettierrc
   cp .prettierrc "$BATS_TEST_TMPDIR/before"

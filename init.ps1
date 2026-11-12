@@ -893,8 +893,8 @@ if (Test-Path $gitignore) {
 # #39 keeps status:/superseded_by: as plain lines under a decisionLog heading. A
 # formatter running proseWrap always/never joins them into one line, so offer a
 # proseWrap preserve override scoped to the working-memory dir. The edit runs in
-# node so the file keeps its key order and indent. Exit 0 = added, 3 = already
-# there, anything else = couldn't edit safely (print the snippet).
+# node so the file keeps its key order and indent. Exit 0 = added, 3 = a preserve
+# override is already in effect, anything else = couldn't edit safely (print the snippet).
 # Parity copy: init.sh's WMK_FMT_NODE holds this script byte for byte; change both together.
 $WmkFmtNode = @'
 const fs = require('fs');
@@ -907,7 +907,9 @@ const target = path.basename(file) === 'package.json' ? (isObj(root) ? root.pret
 if (!isObj(target)) process.exit(2);
 if (target.overrides === undefined) target.overrides = [];
 if (!Array.isArray(target.overrides)) process.exit(2);
-if (target.overrides.some((o) => isObj(o) && [].concat(o.files).includes(glob))) process.exit(3);
+// shortcut: matches globs by string equality, so an unrelated later proseWrap override gets ours appended again, upgrade if that ever matters.
+const last = target.overrides.filter((o) => isObj(o) && isObj(o.options) && o.options.proseWrap !== undefined).pop();
+if (last && [].concat(last.files).includes(glob) && last.options.proseWrap === 'preserve') process.exit(3);
 target.overrides.push({ files: [glob], options: { proseWrap: 'preserve' } });
 const indent = (text.match(/\n([ \t]+)\S/) || [])[1] || 2;
 let out = JSON.stringify(root, null, indent) + '\n';
@@ -945,7 +947,8 @@ function Get-FmtConfigs {
 # A flag always applies and records its answer. Without one, only an interactive
 # run that hasn't recorded an answer asks; Confirm-Prompt would silently take its
 # default with no console, so headless skips and leaves the question for later.
-$FmtGlob = "$WmDir/**/*.md"
+# An rc or typed dir can carry Windows separators; formatter globs only match "/".
+$FmtGlob = "$($WmDir.Replace('\', '/'))/**/*.md"
 $FmtResult = ''
 $fmtInteractive = -not ($NonInteractive -or [Console]::IsInputRedirected)
 if ($FormatterOverride -or ($fmtInteractive -and -not (Get-RcKey 'formatter_override' ''))) {
@@ -965,7 +968,7 @@ if ($FormatterOverride -or ($fmtInteractive -and -not (Get-RcKey 'formatter_over
         }
         switch ($fmtRc) {
             0 { Write-Ok "added a proseWrap override for $FmtGlob to $fmtFile"; $FmtResult = 'added' }
-            3 { Write-Info "$fmtFile already has the $FmtGlob override"; $FmtResult = 'added' }
+            3 { Write-Info "$fmtFile already has a proseWrap preserve override for $FmtGlob in effect"; $FmtResult = 'added' }
             default {
                 $fmtWhere = if ($fmtFile -eq 'package.json') { 'package.json''s "prettier" key (or the shared config it names)' } else { $fmtFile }
                 Write-Warn "couldn't edit $fmtFile safely (or node isn't on PATH). Add this override to $fmtWhere by hand:"
