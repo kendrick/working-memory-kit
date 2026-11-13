@@ -324,6 +324,61 @@ Describe 'installer' {
         Get-HookCount 'SessionStart' 'CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh' | Should -Be 1
     }
 
+    It 'keys that differ only by case stay apart and still get the hooks (#54)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json '{"env":{"Path":"a","PATH":"b"}}'
+        Invoke-Installer | Should -Not -Match 'not valid JSON'
+        $s = ConvertFrom-JsonExact (Get-Content .claude/settings.json -Raw)
+        @($s['env'].Keys) -join ',' | Should -BeExactly 'Path,PATH'
+        $s['env']['Path'] | Should -BeExactly 'a'
+        $s['env']['PATH'] | Should -BeExactly 'b'
+        $s['hooks']['SessionStart'] | Should -Not -BeNullOrEmpty
+        $s['hooks']['SessionEnd'] | Should -Not -BeNullOrEmpty
+    }
+
+    It 'a lowercase sessionstart event is left alone and the kit hook goes under SessionStart (#54)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json '{"hooks":{"sessionstart":[{"hooks":[{"type":"command","command":"echo mine"}]}]}}'
+        Invoke-Installer | Out-Null
+        $hooks = (ConvertFrom-JsonExact (Get-Content .claude/settings.json -Raw))['hooks']
+        $kit = (ConvertFrom-JsonExact (Get-Content (Join-Path $KitRoot 'template/.claude/settings.json') -Raw))['hooks']['SessionStart'][0]['hooks'][0]
+        @($hooks.Keys) -join ',' | Should -BeExactly 'sessionstart,SessionStart,SessionEnd'
+        ConvertTo-Json -InputObject $hooks['sessionstart'] -Depth 20 -Compress | Should -BeExactly '[{"hooks":[{"type":"command","command":"echo mine"}]}]'
+        ConvertTo-Json -InputObject @($hooks['SessionStart'] | ForEach-Object { $_['hooks'] }) -Depth 20 -Compress | Should -BeExactly (ConvertTo-Json -InputObject @($kit) -Depth 20 -Compress)
+    }
+
+    # Same literals as the bats twin, so both installers are held to one parsed result.
+    It 'case-variant input <Label> merges to the same parsed settings.json as init.sh (#54)' -ForEach @(
+        @{ Label = 'Path/PATH'; In = '{"env":{"Path":"a","PATH":"b"}}'
+           Out = '{"env":{"Path":"a","PATH":"b"},"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh\" --claude","timeout":10}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-end.sh\"","timeout":3}]}]}}' }
+        @{ Label = 'sessionstart'; In = '{"hooks":{"sessionstart":[{"hooks":[{"type":"command","command":"echo mine"}]}]}}'
+           Out = '{"hooks":{"sessionstart":[{"hooks":[{"type":"command","command":"echo mine"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh\" --claude","timeout":10}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-end.sh\"","timeout":3}]}]}}' }
+    ) {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json $In
+        Invoke-Installer | Out-Null
+        $got = ConvertFrom-JsonExact (Get-Content .claude/settings.json -Raw)
+        $got | ConvertTo-Json -Depth 20 -Compress | Should -BeExactly ((ConvertFrom-JsonExact $Out) | ConvertTo-Json -Depth 20 -Compress)
+    }
+
+    It 'a non-ASCII value in settings.json keeps its characters through the merge (#54)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        # 5.1 reads this BOM-less test file as ANSI, so the accent has to come from [char].
+        $cafe = "caf$([char]0xE9)"
+        [IO.File]::WriteAllText((Join-Path (Get-Location) '.claude/settings.json'), "{`"env`":{`"NAME`":`"$cafe`"}}`n", [Text.UTF8Encoding]::new($false))
+        Invoke-Installer | Out-Null
+        $text = [IO.File]::ReadAllText((Join-Path (Get-Location) '.claude/settings.json'), [Text.UTF8Encoding]::new($false))
+        (ConvertFrom-JsonExact $text)['env']['NAME'] | Should -BeExactly $cafe
+        (ConvertFrom-JsonExact $text)['hooks']['SessionStart'] | Should -Not -BeNullOrEmpty
+    }
+
+    It 'a large integer in settings.json keeps its digits through the merge (#54)' {
+        New-Item -ItemType Directory .claude -Force | Out-Null
+        Set-Content .claude/settings.json '{"n":12345678901234,"hooks":{}}'
+        Invoke-Installer | Out-Null
+        Get-Content .claude/settings.json -Raw | Should -Match '"n": *12345678901234[,\r\n]'
+    }
+
     It 'fresh install: no template example reads as a dated log entry (#37)' {
         Invoke-Installer | Out-Null
         Select-String -Path '_working-memory/*.md' -Pattern '^## \d{4}-' | Should -BeNullOrEmpty

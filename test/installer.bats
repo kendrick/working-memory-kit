@@ -375,6 +375,49 @@ teardown() { teardown_repo; }
   [ "$(count_hook SessionStart 'CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh')" -eq 1 ]
 }
 
+@test "keys that differ only by case stay apart and still get the hooks (#54)" {
+  mkdir -p .claude
+  printf '%s\n' '{"env":{"Path":"a","PATH":"b"}}' > .claude/settings.json
+  run run_installer
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"not valid JSON"* ]]
+  python3 -c 'import json; s = json.load(open(".claude/settings.json")); assert s["env"] == {"Path": "a", "PATH": "b"}, s; assert {"SessionStart", "SessionEnd"} <= set(s["hooks"]), s'
+}
+
+@test "a lowercase sessionstart event is left alone and the kit hook goes under SessionStart (#54)" {
+  mkdir -p .claude
+  printf '%s\n' '{"hooks":{"sessionstart":[{"hooks":[{"type":"command","command":"echo mine"}]}]}}' > .claude/settings.json
+  run_installer
+  python3 -c '
+import json, sys
+s = json.load(open(".claude/settings.json"))["hooks"]
+kit = json.load(open(sys.argv[1]))["hooks"]["SessionStart"][0]["hooks"][0]
+assert set(s) == {"sessionstart", "SessionStart", "SessionEnd"}, s
+assert s["sessionstart"] == [{"hooks": [{"type": "command", "command": "echo mine"}]}], s
+assert [h for g in s["SessionStart"] for h in g["hooks"]] == [kit], s
+' "$KIT_ROOT/template/.claude/settings.json"
+}
+
+# Same literals as the Pester twin, so both installers are held to one parsed result.
+@test "case-variant inputs merge to the same parsed settings.json as init.ps1 (#54)" {
+  mkdir -p .claude
+  printf '%s\n' '{"env":{"Path":"a","PATH":"b"}}' > .claude/settings.json
+  run_installer
+  python3 -c 'import json, sys; assert json.load(open(".claude/settings.json")) == json.loads(sys.argv[1])' \
+    '{"env":{"Path":"a","PATH":"b"},"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh\" --claude","timeout":10}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-end.sh\"","timeout":3}]}]}}'
+  printf '%s\n' '{"hooks":{"sessionstart":[{"hooks":[{"type":"command","command":"echo mine"}]}]}}' > .claude/settings.json
+  run_installer
+  python3 -c 'import json, sys; assert json.load(open(".claude/settings.json")) == json.loads(sys.argv[1])' \
+    '{"hooks":{"sessionstart":[{"hooks":[{"type":"command","command":"echo mine"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh\" --claude","timeout":10}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-end.sh\"","timeout":3}]}]}}'
+}
+
+@test "a large integer in settings.json keeps its digits through the merge (#54)" {
+  mkdir -p .claude
+  printf '%s\n' '{"n":12345678901234,"hooks":{}}' > .claude/settings.json
+  run_installer
+  grep -q '"n": *12345678901234[,}]*$' .claude/settings.json
+}
+
 @test "fresh install: no template example reads as a dated log entry (#37)" {
   run_installer
   run grep -E '^## [0-9]{4}-' _working-memory/*.md
