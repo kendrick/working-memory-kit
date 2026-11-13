@@ -57,6 +57,8 @@ Pull findings from each source. Use deterministic parsing where possible (manife
 
 A finding is small: one sentence per detected fact, plus a pointer back to the source. Findings are not ready-to-write working memory yet; phase 3 shapes them.
 
+Extract also tags each finding `scope: repo` or `scope: org`, with a one-line `scope_reason`. A finding is `scope: org` when it names more than one repo or a governing team outside this repo's. Everything else is `scope: repo`. An `org` finding gets no working memory target.
+
 ### 3. draft
 
 Map findings into the six-file template:
@@ -70,7 +72,7 @@ Map findings into the six-file template:
 | Type definitions, API shapes, schemas                         | `dataContracts.md`                                           |
 | Unresolved questions about the project's intent               | `openQuestions.md`                                           |
 
-Drafts include the source as inline reference: a `decisionLog.md` entry citing the commit hash or ADR file it came from. Provenance keeps the working memory honest as the codebase evolves.
+Drafts include the source as inline reference: a `decisionLog.md` entry citing the commit hash or ADR file it came from. Provenance keeps the working memory honest as the codebase evolves. Draft passes `scope: org` findings through unchanged instead of mapping them into a file.
 
 ### 4. reconcile
 
@@ -80,11 +82,18 @@ Compare drafts against any existing working memory. For brownfield projects with
 - **Would overwrite.** Existing content covers the same territory; surface the diff for review.
 - **Conflicts with code.** The draft asserts something the codebase contradicts. Investigation needed before either side wins.
 
-For greenfield projects, reconcile is trivial: every draft is net-new.
+For greenfield projects, reconcile is trivial: every draft is net-new. Reconcile passes `scope: org` findings through unchanged too.
 
 ### 5. propose
 
 Surface drafts for human review. Standard mechanism: a single commit (or PR for multi-developer projects) that updates the relevant working memory files in a reviewable batch. `activeContext.md` is excluded; the developer drives that file by hand.
+
+Propose also handles the `scope: org` findings that draft and reconcile passed through. If none arrived, it says nothing about org memory. Otherwise what it does depends on whether `.ltm.yaml` sits at the repo root, the only signal that the repo is connected to a Bank. Having `ltm` on your PATH doesn't count.
+
+- With `.ltm.yaml`, propose lists the findings under an "Org memory candidates" heading in its output. For each one it prints an `ltm propose` command in a `bash/zsh` block and a `PowerShell` block, since the shells quote differently. It writes a body file per finding to a temp directory outside the repo, so the file never joins the working memory commit. Propose never runs the commands. You run them yourself and add `--applies-to` if you want it.
+- Without `.ltm.yaml`, each finding becomes a "May belong in org memory" entry in `openQuestions.md`, staged in the same batch as the rest. A finding whose entry is already there is skipped, so a second run doesn't duplicate it.
+
+`ltm propose` and `ltm promote` are different routes. `ltm propose` takes a hydration finding that never entered working memory. `ltm promote` takes an entry already in working memory; see [The Bridge to a Bank](#the-bridge-to-a-bank).
 
 After acceptance, the `working-memory-synchronizer` agent (or `/update-working-memory`, which invokes the same skill in either Claude Code or Copilot) takes over for ongoing maintenance. Hydration is the one-time or periodic deeper job. Synchronization is the continuous sweep.
 
@@ -96,7 +105,7 @@ An entry belongs in a Bank once it applies to more than one repo, or a team outs
 ltm promote _working-memory/decisionLog.md --entry "<title>"
 ```
 
-This opens a Proposal in the Bank and stamps the entry with a `promoted_to:` line. From then on the Bank owns the decision. [The promotion guide](https://github.com/kendrick/long-term-memory-kit/blob/main/guide/promotion.md) covers how the Bank reviews incoming Proposals.
+This opens a Proposal in the Bank and stamps the entry with a `promoted_to:` line. From then on the Bank owns the decision. [The promotion guide](https://github.com/kendrick/long-term-memory-kit/blob/main/guide/promotion.md) covers how the Bank reviews incoming Proposals. Hydration findings that never entered working memory take a different route, described under [5. propose](#5-propose).
 
 The friction is the feature. Promotion has to earn its way in, and the human review of each Proposal is what keeps the Bank's signal-to-noise high.
 
