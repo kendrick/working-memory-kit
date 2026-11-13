@@ -254,6 +254,27 @@ Describe 'installer' {
         $outside | Should -Not -Exist
     }
 
+    # Typed at the prompt, unlike the seeded-rc cases above, so only a pty reaches it. `$&` is the
+    # regex "whole match" token, so a -replace regression in Install-Machinery would splice _working-memory in.
+    It 'a typed working-memory dir renders literally, so $& stays $& (#51)' -Skip:($env:OS -eq 'Windows_NT' -or -not (Get-Command python3 -ErrorAction SilentlyContinue)) {
+        Invoke-InstallerTty "wm`$&x`n" | Out-Null
+        $hook = Get-Content scripts/working-memory-session-start.ps1 -Raw
+        $hook | Should -CMatch ([regex]::Escape('wm$&x'))
+        $hook | Should -Not -Match 'wm_working-memoryx'
+    }
+
+    # Restoring an unset var with SetEnvironmentVariable($k, $null) would leave it set-but-empty in pwsh.
+    It 'the pty helper leaves its env vars unset afterward (#51)' -Skip:($env:OS -eq 'Windows_NT' -or -not (Get-Command python3 -ErrorAction SilentlyContinue)) {
+        $names = 'WMK_TTY_INPUT', 'WMK_KIT', 'WMK_INSTALLER', 'NO_COLOR'
+        $saved = [Environment]::GetEnvironmentVariable('NO_COLOR')
+        try {
+            foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, [NullString]::Value) }
+            Invoke-InstallerTty "`n" | Out-Null
+            foreach ($n in $names) { Test-Path "Env:$n" | Should -BeFalse }
+        }
+        finally { [Environment]::SetEnvironmentVariable('NO_COLOR', $(if ($null -eq $saved) { [NullString]::Value } else { $saved })) }
+    }
+
     It 'a drive-letter rc dir is refused and the default is used (#43)' {
         # Where $repo has a drive, seed a unique sibling so a stray dir on the runner can't fail the
         # no-write assert. Without a drive, C:\evil can't exist, so the assert only bites on Windows.
