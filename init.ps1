@@ -265,11 +265,24 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
     Write-Ok "updated working-memory section in $dst"
 }
 
+# Parses JSON into IDictionary/IList with exact-case keys, the way init.sh's
+# perl reads them; ConvertFrom-Json folds keys that differ only by case (#54).
+# -AsHashtable is PS 6+, so 5.1 (#48) gets JavaScriptSerializer, whose
+# Dictionary[string,object] is ordinal and keeps insertion order.
+function ConvertFrom-JsonExact ($text) {
+    if ($PSVersionTable.PSVersion.Major -ge 6) { return , ($text | ConvertFrom-Json -AsHashtable) }
+    Add-Type -AssemblyName System.Web.Extensions
+    $serializer = [System.Web.Script.Serialization.JavaScriptSerializer]::new()
+    $serializer.MaxJsonLength = [int]::MaxValue
+    return , $serializer.DeserializeObject($text)
+}
+
 # A project's own Claude Code settings and hooks share .claude/settings.json
 # with ours, so we merge instead of copying. Parity with merge_claude_hooks in
-# init.sh: kit hooks match by script name, so a changed command line replaces
-# its old entry; an unchanged result is never rewritten (no git noise). Key
-# order is kept here, init.sh sorts; only parsed content has to agree.
+# init.sh: keys are case-sensitive, kit hooks match by script name, so a
+# changed command line replaces its old entry; an unchanged result is never
+# rewritten (no git noise). Key order is kept here, init.sh sorts; only parsed
+# content has to agree.
 function Merge-ClaudeHooks ($src, $dst) {
     if (-not (Test-Path $dst)) {
         $parent = Split-Path $dst -Parent
@@ -279,72 +292,70 @@ function Merge-ClaudeHooks ($src, $dst) {
         return
     }
     $invalid = "$dst is not valid JSON (or not the settings shape Claude Code reads); left it as-is. Fix it and re-run to get the working-memory hooks."
-    $obj = [System.Management.Automation.PSCustomObject]
+    $dict = [System.Collections.IDictionary]
+    $list = [System.Collections.IList]
     $raw = Read-Utf8Text $dst
     # The leading-brace check catches a top-level array, which PS 7 would
     # enumerate into a lone object and slip past the type check below.
     if (-not $raw.TrimStart().StartsWith('{')) { Write-Warn $invalid; return }
-    try { $settings = $raw | ConvertFrom-Json } catch { Write-Warn $invalid; return }
-    if ($settings -isnot $obj) { Write-Warn $invalid; return }
-    if ($null -eq $settings.hooks) {
-        $settings | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) -Force
-    }
-    if ($settings.hooks -isnot $obj) { Write-Warn $invalid; return }
-    foreach ($ev in $settings.hooks.PSObject.Properties) {
-        if ($ev.Value -isnot [array]) { Write-Warn $invalid; return }
-        foreach ($g in $ev.Value) {
-            if ($g -isnot $obj -or ($null -ne $g.hooks -and $g.hooks -isnot [array])) { Write-Warn $invalid; return }
+    try { $settings = ConvertFrom-JsonExact $raw } catch { Write-Warn $invalid; return }
+    if ($settings -isnot $dict) { Write-Warn $invalid; return }
+    if ($null -eq $settings['hooks']) { $settings['hooks'] = [ordered]@{} }
+    $hooks = $settings['hooks']
+    if ($hooks -isnot $dict) { Write-Warn $invalid; return }
+    foreach ($evName in @($hooks.Keys)) {
+        $ev = $hooks[$evName]
+        if ($ev -isnot $list -or $ev -is $dict) { Write-Warn $invalid; return }
+        foreach ($g in $ev) {
+            if ($g -isnot $dict -or ($null -ne $g['hooks'] -and ($g['hooks'] -isnot $list -or $g['hooks'] -is $dict))) { Write-Warn $invalid; return }
         }
     }
     # Depth 20: the default of 2 flattens nested values (permissions, hooks) to strings.
-    $before = $settings | ConvertTo-Json -Depth 20 -Compress
+    $before = ConvertTo-Json -InputObject $settings -Depth 20 -Compress
 
-    $kitSettings = [IO.File]::ReadAllText($src) | ConvertFrom-Json
-    foreach ($kitEvent in $kitSettings.hooks.PSObject.Properties) {
-        $evName = $kitEvent.Name
+    $kitSettings = ConvertFrom-JsonExact ([IO.File]::ReadAllText($src))
+    foreach ($evName in @($kitSettings['hooks'].Keys)) {
         $groups = @()
-        if ($null -ne $settings.hooks.$evName) { $groups = @($settings.hooks.$evName) }
-        foreach ($sg in $kitEvent.Value) {
-            foreach ($kit in $sg.hooks) {
-                if ("$($kit.command)" -notmatch '(working-memory-session-(start|end))\.') { throw "no script in kit hook: $($kit.command)" }
+        if ($null -ne $hooks[$evName]) { $groups = @($hooks[$evName]) }
+        foreach ($sg in $kitSettings['hooks'][$evName]) {
+            foreach ($kit in $sg['hooks']) {
+                if ("$($kit['command'])" -notmatch '(working-memory-session-(start|end))\.') { throw "no script in kit hook: $($kit['command'])" }
                 $pattern = '(?<![\w-])' + [regex]::Escape($Matches[1]) + '\.'
                 $found = $false
                 $keptGroups = @()
                 foreach ($g in $groups) {
-                    if ($null -eq $g.hooks) { $keptGroups += $g; continue }
+                    if ($null -eq $g['hooks']) { $keptGroups += $g; continue }
                     $kept = @()
-                    foreach ($h in $g.hooks) {
-                        if ($h -is $obj -and "$($h.command)" -match $pattern) {
+                    foreach ($h in $g['hooks']) {
+                        if ($h -is $dict -and "$($h['command'])" -match $pattern) {
                             if ($found) { continue }
                             $found = $true
                             $h = $kit
                         }
-                        $kept += $h
+                        # The unary comma keeps a hook entry that is itself an array from being spliced in.
+                        $kept += , $h
                     }
-                    if ($g.hooks.Count -gt 0 -and $kept.Count -eq 0) { continue }
-                    $g.hooks = $kept
+                    if ($g['hooks'].Count -gt 0 -and $kept.Count -eq 0) { continue }
+                    $g['hooks'] = $kept
                     $keptGroups += $g
                 }
                 $groups = $keptGroups
                 if (-not $found) {
-                    $newGroup = [pscustomobject]@{}
-                    foreach ($p in $sg.PSObject.Properties) {
-                        if ($p.Name -ne 'hooks') { $newGroup | Add-Member -NotePropertyName $p.Name -NotePropertyValue $p.Value }
-                    }
-                    $newGroup | Add-Member -NotePropertyName hooks -NotePropertyValue @($kit)
+                    $newGroup = [ordered]@{}
+                    foreach ($k in $sg.Keys) { if ($k -cne 'hooks') { $newGroup[$k] = $sg[$k] } }
+                    $newGroup['hooks'] = @($kit)
                     $groups += $newGroup
                 }
             }
         }
-        # @() keeps a single group a JSON array. Assigning in place keeps key order;
-        # Add-Member -Force would move the key and defeat the unchanged check.
-        if ($null -eq $settings.hooks.PSObject.Properties[$evName]) { $settings.hooks | Add-Member -NotePropertyName $evName -NotePropertyValue @($groups) }
-        else { $settings.hooks.$evName = @($groups) }
+        # @() keeps a single group a JSON array. Indexer assignment keeps an
+        # existing key in place, which the unchanged check relies on.
+        $hooks[$evName] = @($groups)
     }
 
-    if (($settings | ConvertTo-Json -Depth 20 -Compress) -eq $before) { return }
+    if ((ConvertTo-Json -InputObject $settings -Depth 20 -Compress) -eq $before) { return }
     # LF, matching init.sh; PS 5.1 emits CRLF on Windows.
-    $json = ($settings | ConvertTo-Json -Depth 20) -replace "`r`n", "`n"
+    $json = (ConvertTo-Json -InputObject $settings -Depth 20) -replace "`r`n", "`n"
     Write-Utf8Text $dst "$json`n"
     Write-Ok "merged working-memory hooks into $dst"
 }
