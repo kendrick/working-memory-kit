@@ -256,6 +256,7 @@ teardown() { teardown_repo; }
   [ ! -d ../outside ]
   # #52: the rejected line stays byte-for-byte, so the next run warns again.
   [ "$(cat .working-memoryrc)" = 'WORKING_MEMORY_DIR="../outside"' ]
+  # $(cat) strips trailing newlines, so the byte count is what catches a changed final newline.
   [ "$(wc -c < .working-memoryrc | tr -d ' ')" -eq 32 ]
   run run_installer
   [ "$status" -eq 0 ]

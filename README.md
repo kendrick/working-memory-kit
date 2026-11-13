@@ -197,7 +197,7 @@ Two named presets ship in `.working-memoryrc.example`:
 - **strict** (15 / 3 / 100): early-stage projects iterating on architecture.
 - **loose** (40 / 10 / 500): mature codebases with mostly incremental work.
 
-A custom dir picked at install is saved to `.working-memoryrc` as `WORKING_MEMORY_DIR`, so commit that file and re-runs, headless ones included, reuse that dir. Only a relative dir made of letters, digits, and `. _ - / \` is saved and reused. A rejected value stays in the file, and each run warns about it until someone edits the line.
+A custom dir picked at install is saved to `.working-memoryrc` as `WORKING_MEMORY_DIR`, so commit that file and re-runs, headless ones included, reuse that dir. Only a relative dir made of letters, digits, and `. _ - / \` is saved and reused. If the installer rejects the value and falls back to the default, the line stays in the file and each run warns about it until someone edits the line.
 
 ## Why these defaults
 
