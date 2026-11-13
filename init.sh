@@ -499,10 +499,13 @@ wm_dir_unsafe() {
 # outright, skipping the .kitnew sidecars. It's the flag-only escape hatch for
 # the Upgrade flow (there's deliberately no menu item and no --force alias, which
 # would read as "skip confirmations"). Content files are never touched by it.
+# --formatter-override / --no-formatter-override answer the Prettier/oxfmt
+# override prompt ahead of time; a headless run with neither skips that step.
 COEXIST_WITH=""
 COEXIST_PRINCIPLES=""
 NO_COEXIST=0
 OVERWRITE_MACHINERY=0
+FORMATTER_OVERRIDE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --coexist-with=*)       COEXIST_WITH="${1#*=}"; shift ;;
@@ -511,6 +514,8 @@ while [ $# -gt 0 ]; do
     --coexist-principles)   shift; if [ $# -gt 0 ]; then COEXIST_PRINCIPLES="$1"; shift; fi ;;
     --no-coexist)           NO_COEXIST=1; shift ;;
     --overwrite-machinery)  OVERWRITE_MACHINERY=1; shift ;;
+    --formatter-override)    FORMATTER_OVERRIDE=yes; shift ;;
+    --no-formatter-override) FORMATTER_OVERRIDE=no; shift ;;
     *)                      warn "ignoring unknown option: $1"; shift ;;
   esac
 done
@@ -993,6 +998,106 @@ else
   printf "# Local-only active context (working-memory-kit)\n%s\n" "$GIT_LINE" > "$GITIGNORE"
   ok "created .gitignore with activeContext.md entry"
 fi
+
+# ---------- formatter override ----------
+
+# #39 keeps status:/superseded_by: as plain lines under a decisionLog heading. A
+# formatter running proseWrap always/never joins them into one line, so offer a
+# proseWrap preserve override scoped to the working-memory dir. The edit runs in
+# node, not JSON::PP, so the file keeps its key order and indent. Exit 0 = added,
+# 3 = a preserve override is already in effect, anything else = couldn't edit safely (print the snippet).
+# Parity copy: init.ps1 embeds this script byte for byte; change both together.
+WMK_FMT_NODE=$(cat <<'EOF'
+const fs = require('fs');
+const path = require('path');
+const [file, glob] = process.argv.slice(1);
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+let text, root;
+try { text = fs.readFileSync(file, 'utf8'); root = JSON.parse(text); } catch (e) { process.exit(2); }
+const target = path.basename(file) === 'package.json' ? (isObj(root) ? root.prettier : null) : root;
+if (!isObj(target)) process.exit(2);
+if (target.overrides === undefined) target.overrides = [];
+if (!Array.isArray(target.overrides)) process.exit(2);
+// shortcut: matches globs by string equality, so an unrelated later proseWrap override gets ours appended again, upgrade if that ever matters.
+const last = target.overrides.filter((o) => isObj(o) && isObj(o.options) && o.options.proseWrap !== undefined).pop();
+if (last && [].concat(last.files).includes(glob) && last.options.proseWrap === 'preserve' && last.excludeFiles === undefined) process.exit(3);
+target.overrides.push({ files: [glob], options: { proseWrap: 'preserve' } });
+const indent = (text.match(/\n([ \t]+)\S/) || [])[1] || 2;
+let out = JSON.stringify(root, null, indent) + '\n';
+if (text.includes('\r\n')) out = out.replace(/\n/g, '\r\n');
+fs.writeFileSync(file, out);
+EOF
+)
+
+# Prettier 3 takes the first config it finds, and editing any other one changes
+# nothing, so walk its own search order (src/config/prettier-config/
+# config-searcher.js). package.json only counts with a "prettier" key, as there.
+# shortcut: package.yaml's "prettier" key isn't checked; add it if anyone asks.
+fmt_configs() {
+  local f found=""
+  if [ -f "$TARGET_DIR/package.json" ] &&
+     perl -MJSON::PP -e 'local $/; my $j = eval { decode_json(<STDIN>) }; exit(ref $j eq "HASH" && exists $j->{prettier} ? 0 : 1)' \
+       < "$TARGET_DIR/package.json"; then
+    found="package.json"
+  fi
+  [ -z "$found" ] && for f in .prettierrc .prettierrc.json .prettierrc.yml .prettierrc.yaml .prettierrc.json5 \
+           .prettierrc.js prettier.config.js .prettierrc.ts prettier.config.ts \
+           .prettierrc.mjs prettier.config.mjs .prettierrc.mts prettier.config.mts \
+           .prettierrc.cjs prettier.config.cjs .prettierrc.cts prettier.config.cts .prettierrc.toml; do
+    if [ -f "$TARGET_DIR/$f" ]; then found="$f"; break; fi
+  done
+  [ -n "$found" ] && printf '%s\n' "$found"
+  for f in .oxfmtrc.json .oxfmtrc.jsonc; do
+    if [ -f "$TARGET_DIR/$f" ]; then printf '%s\n' "$f"; break; fi
+  done
+  return 0
+}
+
+# A flag always applies and records its answer. Without one, only an interactive
+# run that hasn't recorded an answer asks; confirm would silently take its
+# default with no tty, so headless skips and leaves the question for later.
+# An rc or typed dir can carry Windows separators; formatter globs only match "/".
+FMT_GLOB="${WM_DIR//\\//}/**/*.md"
+FMT_RESULT=""
+if [ -n "$FORMATTER_OVERRIDE" ] || { [ -n "$TTY_FD" ] && [ -z "$(read_rc formatter_override "")" ]; }; then
+  while IFS= read -r fmt_file; do
+    [ -z "$fmt_file" ] && continue
+    fmt_answer="$FORMATTER_OVERRIDE"
+    if [ -z "$fmt_answer" ]; then
+      if confirm "$fmt_file formats Markdown. Add an override so it keeps $WM_DIR/ metadata lines as written?" y; then
+        fmt_answer=yes
+      else
+        fmt_answer=no
+      fi
+    fi
+    if [ "$fmt_answer" = no ]; then
+      [ "$FMT_RESULT" = added ] || FMT_RESULT=declined
+      continue
+    fi
+    fmt_rc=2
+    case "$fmt_file" in
+      .prettierrc|.prettierrc.json|package.json|.oxfmtrc.json)
+        if command -v node >/dev/null 2>&1; then
+          fmt_rc=0
+          node -e "$WMK_FMT_NODE" -- "$TARGET_DIR/$fmt_file" "$FMT_GLOB" </dev/null || fmt_rc=$?
+        fi
+        ;;
+    esac
+    case "$fmt_rc" in
+      0) ok "added a proseWrap override for $FMT_GLOB to $fmt_file"; FMT_RESULT=added ;;
+      3) info "$fmt_file already has a proseWrap preserve override for $FMT_GLOB in effect"; FMT_RESULT=added ;;
+      *)
+        fmt_where="$fmt_file"
+        [ "$fmt_file" = package.json ] && fmt_where="package.json's \"prettier\" key (or the shared config it names)"
+        warn "couldn't edit $fmt_file safely (or node isn't on PATH). Add this override to $fmt_where by hand:"
+        printf '  { "overrides": [ { "files": ["%s"], "options": { "proseWrap": "preserve" } } ] }\n' "$FMT_GLOB"
+        ;;
+    esac
+  done <<EOF
+$(fmt_configs)
+EOF
+fi
+if [ -n "$FMT_RESULT" ]; then set_rc_key formatter_override "$FMT_RESULT"; fi
 
 # ---------- substitute WM_DIR token in copied files if user overrode default ----------
 

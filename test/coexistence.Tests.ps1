@@ -183,3 +183,158 @@ Describe 'coexistence' {
         git status --porcelain | Should -BeNullOrEmpty
     }
 }
+
+# --- #44: a formatter override that keeps the working-memory dir's metadata lines ---
+# Twins of the headless bats cases. The yes/no prompt cases and the Prettier
+# end-to-end run stay bats-only: Pester can't drive a console, and one runner
+# proving the formatter behavior is enough.
+
+Describe 'formatter override' {
+    BeforeAll {
+        $FMT_GLOB = '_working-memory/**/*.md'
+        # "<count> <files[0]> <proseWrap>", so a duplicate shows up as a count.
+        function Get-Override ($path, $key) {
+            $j = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+            if ($key) { $j = $j.$key }
+            $o = @($j.overrides)
+            return "$($o.Count) $($o[0].files[0]) $($o[0].options.proseWrap)"
+        }
+        function Test-RcHasFmtKey { return (Get-MatchCount '.working-memoryrc' '^formatter_override=') -gt 0 }
+    }
+    BeforeEach { $repo = New-TestRepo }
+    AfterEach { Remove-TestRepo $repo }
+
+    It '.prettierrc gets the override with --formatter-override (#44)' {
+        Set-Content .prettierrc '{"proseWrap":"always"}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .prettierrc | Should -Be "1 $FMT_GLOB preserve"
+        Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
+    }
+
+    It '.oxfmtrc.json gets the override, from a path with a space and a quote (#44)' {
+        New-Item -ItemType Directory -Path "it's here" | Out-Null
+        Set-Location "it's here"
+        [Environment]::CurrentDirectory = (Get-Location).Path
+        Set-Content .oxfmtrc.json '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .oxfmtrc.json | Should -Be "1 $FMT_GLOB preserve"
+        Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
+    }
+
+    It "a re-run doesn't duplicate the override (#44)" {
+        Set-Content .prettierrc '{"proseWrap":"always"}'
+        Invoke-Installer --formatter-override | Out-Null
+        git add -A; git commit -q -m base
+        $out = Invoke-Installer
+        $out | Should -Not -Match 'Add an override'
+        git status --porcelain | Should -BeNullOrEmpty
+        $out = Invoke-Installer --formatter-override
+        $out | Should -Match 'already has a proseWrap preserve override'
+        git status --porcelain | Should -BeNullOrEmpty
+        Get-Override .prettierrc | Should -Be "1 $FMT_GLOB preserve"
+    }
+
+    It '--no-formatter-override records declined and edits nothing (#44)' {
+        Set-Content .prettierrc '{"proseWrap":"always"}'
+        $before = Get-Content .prettierrc -Raw
+        Invoke-Installer --no-formatter-override | Out-Null
+        Get-Content .prettierrc -Raw | Should -BeExactly $before
+        Get-MatchCount '.working-memoryrc' '^formatter_override=declined$' | Should -Be 1
+    }
+
+    It 'package.json prettier object gets the override, tabs kept (#44)' {
+        [IO.File]::WriteAllText((Join-Path $repo 'package.json'), "{`n`t`"name`": `"demo`",`n`t`"prettier`": {`n`t`t`"semi`": false`n`t},`n`t`"version`": `"1.0.0`"`n}`n")
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override package.json prettier | Should -Be "1 $FMT_GLOB preserve"
+        $lines = Get-Content package.json
+        $lines | Should -Contain "`t`t`"semi`": false,"
+        $lines | Should -Contain "`t`t`"overrides`": ["
+        $lines[0..1] | Should -Be @('{', "`t`"name`": `"demo`",")
+        $lines[-2..-1] | Should -Be @("`t`"version`": `"1.0.0`"", '}')
+    }
+
+    It 'a package.json prettier key beats .prettierrc, as in Prettier (#44)' {
+        Set-Content package.json "{`n  `"name`": `"demo`",`n  `"prettier`": {}`n}"
+        Set-Content .prettierrc '{"proseWrap":"always"}'
+        $before = Get-Content .prettierrc -Raw
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override package.json prettier | Should -Be "1 $FMT_GLOB preserve"
+        Get-Content .prettierrc -Raw | Should -BeExactly $before
+    }
+
+    It 'a string prettier key in package.json prints the snippet and edits nothing (#44)' {
+        Set-Content package.json "{`n  `"name`": `"demo`",`n  `"prettier`": `"@acme/prettier-config`"`n}"
+        $before = Get-Content package.json -Raw
+        $out = Invoke-Installer --formatter-override
+        $out | Should -Match ([regex]::Escape('"proseWrap": "preserve"'))
+        $out | Should -Match 'or the shared config it names'
+        Get-Content package.json -Raw | Should -BeExactly $before
+        Test-RcHasFmtKey | Should -BeFalse
+    }
+
+    It 'a YAML .prettierrc prints the snippet and edits nothing (#44)' {
+        Set-Content .prettierrc 'proseWrap: always'
+        $before = Get-Content .prettierrc -Raw
+        $out = Invoke-Installer --formatter-override
+        $out | Should -Match ([regex]::Escape('"proseWrap": "preserve"'))
+        Get-Content .prettierrc -Raw | Should -BeExactly $before
+        Test-RcHasFmtKey | Should -BeFalse
+    }
+
+    It 'a snippet-only Prettier config and an editable oxfmt config record added (#44)' {
+        Set-Content .prettierrc 'proseWrap: always'
+        Set-Content .oxfmtrc.json '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .oxfmtrc.json | Should -Be "1 $FMT_GLOB preserve"
+        Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
+    }
+
+    It 'a custom dir gets its own glob (#44)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="mem"'
+        Set-Content .prettierrc '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .prettierrc | Should -Be '1 mem/**/*.md preserve'
+    }
+
+    It 'a dir with a backslash gets a forward-slash glob (#44)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="docs\memory"'
+        Set-Content .prettierrc '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .prettierrc | Should -Be '1 docs/memory/**/*.md preserve'
+    }
+
+    It 'an existing override without proseWrap preserve still gets one (#44)' {
+        Set-Content .prettierrc '{"proseWrap":"always","overrides":[{"files":["_working-memory/**/*.md"],"options":{"printWidth":100}}]}'
+        Invoke-Installer --formatter-override | Out-Null
+        $o = @((Get-Content .prettierrc -Raw | ConvertFrom-Json).overrides)
+        "$($o.Count) $($o[1].files[0]) $($o[1].options.proseWrap)" | Should -Be "2 $FMT_GLOB preserve"
+        Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
+        Invoke-Installer --formatter-override | Out-Null
+        @((Get-Content .prettierrc -Raw | ConvertFrom-Json).overrides).Count | Should -Be 2
+    }
+
+    It "a later override that sets proseWrap shadows the kit's, so a new one is appended last (#44)" {
+        Set-Content .prettierrc '{"overrides":[{"files":["_working-memory/**/*.md"],"options":{"proseWrap":"preserve"}},{"files":["**/*.md"],"options":{"proseWrap":"always"}}]}'
+        Invoke-Installer --formatter-override | Out-Null
+        $o = @((Get-Content .prettierrc -Raw | ConvertFrom-Json).overrides)
+        "$($o.Count) $($o[-1].files[0]) $($o[-1].options.proseWrap)" | Should -Be "3 $FMT_GLOB preserve"
+        Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
+    }
+
+    It "an override with excludeFiles is not reused, so the kit's is appended last (#44)" {
+        Set-Content .prettierrc '{"proseWrap":"always","overrides":[{"files":["_working-memory/**/*.md"],"excludeFiles":["_working-memory/decisionLog.md"],"options":{"proseWrap":"preserve"}}]}'
+        Invoke-Installer --formatter-override | Out-Null
+        $o = @((Get-Content .prettierrc -Raw | ConvertFrom-Json).overrides)
+        "$($o.Count) $($o[-1].files[0]) $($o[-1].options.proseWrap) $($null -eq $o[-1].excludeFiles)" | Should -Be "2 $FMT_GLOB preserve True"
+        Get-MatchCount '.working-memoryrc' '^formatter_override=added$' | Should -Be 1
+    }
+
+    It 'headless with no flag skips the override (#44)' {
+        Set-Content .prettierrc '{"proseWrap":"always"}'
+        $before = Get-Content .prettierrc -Raw
+        $out = Invoke-Installer
+        Get-Content .prettierrc -Raw | Should -BeExactly $before
+        $out | Should -Not -Match 'Add an override'
+        Test-RcHasFmtKey | Should -BeFalse
+    }
+}
