@@ -223,7 +223,7 @@ my $block = do { local $/; <$bf> }; close $bf;
 $block =~ s/\n+\z//;
 open my $df, "<", $ENV{WMK_DST} or die "dst: $!";
 my $doc = do { local $/; <$df> }; close $df;
-# Like init.ps1 (#70), edit only the text after a leading BOM and write the BOM back.
+# Strip a leading BOM first, or the prepend puts the fence ahead of it and buries it mid-file (#72).
 my $bom = $doc =~ s/\A\xEF\xBB\xBF//;
 my ($qs, $qe) = (quotemeta($start), quotemeta($end));
 
@@ -301,7 +301,7 @@ WMK_HOOKS_PERL='
 my $json = JSON::PP->new->utf8->canonical;
 sub slurp { open my $f, "<", $_[0] or die "$_[0]: $!"; local $/; my $s = <$f>; close $f; $s }
 my $src = $json->decode(slurp($ENV{WMK_SRC}));
-# JSON::PP rejects a leading BOM, so decode the text after it and write the BOM back, as init.ps1 does (#70).
+# JSON::PP rejects a leading BOM, so decode without it and write it back (#72).
 my $dsrc = slurp($ENV{WMK_DST});
 my $bom = $dsrc =~ s/\A\xEF\xBB\xBF//;
 my $dst = eval { $json->decode($dsrc) };
