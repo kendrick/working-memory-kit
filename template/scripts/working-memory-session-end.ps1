@@ -2,7 +2,12 @@
 
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (git rev-parse --show-toplevel 2>$null)
+# 5.1 turns a native command's redirected stderr into ErrorRecords, and 'Stop'
+# makes the first one throw even under 2>$null (e.g. outside a repo). Callers
+# go by git's output and $LASTEXITCODE instead.
+function Invoke-Git { $ErrorActionPreference = 'Continue'; git @args 2>$null }
+
+$repoRoot = (Invoke-Git rev-parse --show-toplevel)
 if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
 
 # Hooks fire on every session in every project. Skip silently outside
@@ -28,7 +33,7 @@ $lineThreshold = if ($env:WORKING_MEMORY_LINE_THRESHOLD) { [int]$env:WORKING_MEM
 # developer never wrote: a one-line edit can read as "7 files changed." Skip
 # until it resolves; the next session-end measures cleanly. (Swapping to
 # `git diff` with no ref isn't the fix: it silently misses fully staged work.)
-$gitDir = git -C $repoRoot rev-parse --absolute-git-dir 2>$null
+$gitDir = Invoke-Git -C $repoRoot rev-parse --absolute-git-dir
 if ($gitDir -and (
     (Test-Path (Join-Path $gitDir 'MERGE_HEAD')) -or
     (Test-Path (Join-Path $gitDir 'rebase-merge')) -or
@@ -48,18 +53,11 @@ try {
         $recorded = ''
         try { $recorded = ((Get-Content -Raw (Join-Path $gitDir 'working-memory-session-base')) + '').Trim() } catch {}
         if ($recorded) {
-            # Windows PowerShell 5.1 turns native stderr into ErrorRecords, and
-            # cat-file prints "fatal: Not a valid object name" for a gc'd base.
-            # Under 'Stop' that throws, so relax it around this one call.
-            $prevEap = $ErrorActionPreference
-            $ErrorActionPreference = 'Continue'
-            try {
-                git -C $repoRoot cat-file -e "$recorded^{commit}" 2>$null
-                if ($LASTEXITCODE -eq 0) { $base = $recorded }
-            } finally { $ErrorActionPreference = $prevEap }
+            Invoke-Git -C $repoRoot cat-file -e "$recorded^{commit}"
+            if ($LASTEXITCODE -eq 0) { $base = $recorded }
         }
     }
-    $diffStats = git -C $repoRoot diff --shortstat $base 2>$null
+    $diffStats = Invoke-Git -C $repoRoot diff --shortstat $base
 } finally {
     if ($null -eq $prevLcAll) { Remove-Item Env:LC_ALL -ErrorAction SilentlyContinue }
     else { $env:LC_ALL = $prevLcAll }
@@ -86,7 +84,7 @@ if ($changedFiles -gt $fileThreshold -and $linesChanged -gt $lineThreshold) {
 
 # Only check pointers when the diff threshold already trips the nudge.
 # We don't want a separate firing condition for "your dataContracts pointers
-# rotted" — that would be a new source of nag. But when the nudge is already
+# rotted": that would be a new source of nag. But when the nudge is already
 # firing, broken pointers piggyback as extra signal in the same message.
 $extra = ''
 if ($reason) {
@@ -122,17 +120,13 @@ if ((Test-Path (Join-Path $repoRoot '.ltm.yaml')) -and (Test-Path $logFile)) {
     # Unreadable file (ACL, mode bits) throws under 'Stop'; treat as no entries.
     $now = ''
     try { $now = (Get-Content -Raw -Encoding UTF8 $logFile) + '' } catch {}
-    # A base without the file makes git show fail; relax 'Stop' for 5.1's stderr ErrorRecords.
     $then = ''
-    $prevEap = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
     # 5.1 decodes native output with the console's OEM code page while $now is
     # UTF-8, so a non-ASCII heading would differ from itself and read as new
     # every session. The set can throw with no console; then keep the default.
     $prevEnc = $null
     try { $prevEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
-    try { $then = (@(git -C $repoRoot show "${base}:$logRel" 2>$null) -join "`n") } finally {
-        $ErrorActionPreference = $prevEap
+    try { $then = (@(Invoke-Git -C $repoRoot show "${base}:$logRel") -join "`n") } finally {
         if ($prevEnc) { try { [Console]::OutputEncoding = $prevEnc } catch {} }
     }
     $heading = '^## '

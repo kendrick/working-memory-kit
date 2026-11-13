@@ -3,7 +3,12 @@
 
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (git rev-parse --show-toplevel 2>$null)
+# 5.1 turns a native command's redirected stderr into ErrorRecords, and 'Stop'
+# makes the first one throw even under 2>$null (e.g. outside a repo). Callers
+# go by git's output and $LASTEXITCODE instead.
+function Invoke-Git { $ErrorActionPreference = 'Continue'; git @args 2>$null }
+
+$repoRoot = (Invoke-Git rev-parse --show-toplevel)
 if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
 
 $wmDir = Join-Path $repoRoot '_working-memory'
@@ -15,8 +20,8 @@ if (-not (Test-Path $wmDir)) { exit 0 }
 # Session-end diffs against this commit, so work committed mid-session still
 # counts (#35). Lives in the git dir: never tracked, and per-worktree. No HEAD
 # (empty repo) means no base; end falls back to HEAD.
-$baseSha = git -C $repoRoot rev-parse --verify -q HEAD 2>$null
-$gitDir = git -C $repoRoot rev-parse --absolute-git-dir 2>$null
+$baseSha = Invoke-Git -C $repoRoot rev-parse --verify -q HEAD
+$gitDir = Invoke-Git -C $repoRoot rev-parse --absolute-git-dir
 # No compact guard like the bash hook's: this script is only wired as Copilot's
 # Windows command, which never re-fires on compaction.
 if ($baseSha -and $gitDir) {
@@ -45,7 +50,7 @@ $exampleFile = Join-Path $wmDir 'activeContext.example.md'
 # The directive lands every session, regardless of file state. The kit can't
 # enforce that the host tool auto-loaded AGENTS.md / CLAUDE.md at session
 # start, so the hook plants the working-memory directive directly. Hosts
-# that DID auto-load those files get a harmless duplicate — small cost
+# that DID auto-load those files get a harmless duplicate, a small cost
 # next to the value of not silently failing on cold-start.
 $directive = "Working memory at _working-memory/ is active. AGENT INSTRUCTION: before deciding what to read, scan the on-demand table in AGENTS.md's '## Working Memory' section. If your task matches a row, that file is required reading before you proceed."
 
@@ -54,7 +59,8 @@ $condition = ''
 if (-not (Test-Path $activeContext)) {
     if (Test-Path $exampleFile) {
         Copy-Item $exampleFile $activeContext
-        $condition = ' Created activeContext.md from template — update it with your current focus.'
+        # [char] keeps this file ASCII; 5.1 reads it as ANSI and would emit a mangled dash.
+        $condition = " Created activeContext.md from template $([char]0x2014) update it with your current focus."
     } else {
         $condition = ' Warning: no activeContext.example.md found; working memory may not be initialized.'
     }
@@ -67,7 +73,7 @@ if (-not (Test-Path $activeContext)) {
     }
 }
 
-# {"systemMessage":"..."} on stdout is the hook protocol — the host surfaces
+# {"systemMessage":"..."} on stdout is the hook protocol: the host surfaces
 # it to the user. Plain Write-Host calls get ignored.
 # A quote or backslash in the dir name must reach the host escaped.
 $msg = "$directive$condition"

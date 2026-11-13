@@ -36,7 +36,11 @@ function Remove-TestRepo ($dir) {
 # every prompt to its default.
 function Invoke-Installer {
     param([Parameter(ValueFromRemainingArguments)] [string[]] $InstallerArgs)
-    return (& (Join-Path $KitRoot 'init.ps1') @InstallerArgs --yes *>&1 | Out-String)
+    # Under 5.1, splatting an unbound $InstallerArgs passes one $null argument, and init.ps1 warns
+    # about it as an unknown option. 5.1's Out-String also wraps at the console width (120 on
+    # Actions), and a [warn] line split across two lines no longer matches.
+    $passed = @($InstallerArgs | Where-Object { $null -ne $_ })
+    return (& (Join-Path $KitRoot 'init.ps1') @passed --yes *>&1 | Out-String -Width 4096)
 }
 
 # Run the session-end hook; return its stdout (the nudge JSON, or empty).

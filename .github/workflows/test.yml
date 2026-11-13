@@ -35,6 +35,8 @@ jobs:
   # covers bash). windows-latest is the required gate: PowerShell's native home,
   # where CRLF and encoding edge cases surface. macos-latest mirrors local dev
   # and catches cross-platform pwsh drift in CI rather than on one machine.
+  # pester-desktop below reruns the suite on Windows PowerShell 5.1, the engine the
+  # installed hooks actually launch (`powershell`, not `pwsh`).
   pester:
     name: pester (${{ matrix.os }})
     strategy:
@@ -53,3 +55,41 @@ jobs:
           Install-Module Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck -Scope CurrentUser
           Import-Module Pester -MinimumVersion 5.5.0
           Invoke-Pester -Path test/ -CI
+
+  pester-desktop:
+    name: pester (windows-latest, Windows PowerShell 5.1)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Exit 1 on any other edition: a runner image change could hand this job pwsh 7,
+      # and it would pass without testing 5.1.
+      - name: Check edition
+        shell: powershell
+        run: |
+          "PSEdition: $($PSVersionTable.PSEdition)"
+          "PSVersion: $($PSVersionTable.PSVersion)"
+          if ($PSVersionTable.PSEdition -ne 'Desktop') { exit 1 }
+      # 5.1 defaults to TLS 1.0/1.1, which the PowerShell Gallery refuses, and needs
+      # the NuGet provider before Install-Module can run unattended.
+      - name: Run Pester
+        shell: powershell
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Install-PackageProvider NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser
+          Install-Module Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          Import-Module Pester -MinimumVersion 5.5.0
+          Invoke-Pester -Path test/ -CI
+
+  # Catches pwsh-7-only syntax and cmdlets in the Windows scripts without waiting on a 5.1 runner.
+  psscriptanalyzer:
+    name: psscriptanalyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # -Path takes one string, so each target gets its own call.
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $r = 'init.ps1', 'template/scripts' | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Settings ./PSScriptAnalyzerSettings.psd1 }
+          if ($r) { $r | Format-Table -AutoSize | Out-String -Width 200 | Write-Host; exit 1 }

@@ -186,7 +186,8 @@ Describe 'session-end hook' {
             # Curly quotes are PowerShell quote delimiters; built from code points to keep this file ASCII.
             $apos = [char]0x2019; $lq = [char]0x201C; $rq = [char]0x201D
             $title = "It${apos}s ${lq}`$x${rq}"
-            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: $title"
+            # UTF8: 5.1's default is ANSI, and the hook reads the log as UTF-8, so ANSI bytes would come back mangled.
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: $title" -Encoding UTF8
             $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
             $msg | Should -BeExactly "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'It${apos}${apos}s ${lq}`$x${rq}'"
             function ltm { $args[3] }
@@ -278,5 +279,16 @@ Describe 'session-end hook' {
             & $start | Out-Null
             [System.IO.File]::ReadAllText($f) | Should -BeExactly (git rev-parse HEAD)
         }
+    }
+}
+
+Describe 'update-working-memory script' {
+    It 'does not throw outside a git repo' {
+        $plain = Join-Path ([System.IO.Path]::GetTempPath()) ('wmk-ng-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Path "$plain/_working-memory" -Force | Out-Null
+        Set-Location $plain; [Environment]::CurrentDirectory = $plain
+        try {
+            { & (Join-Path $KitRoot 'template/scripts/update-working-memory.ps1') 6>$null | Out-Null } | Should -Not -Throw
+        } finally { Remove-TestRepo $plain }
     }
 }
