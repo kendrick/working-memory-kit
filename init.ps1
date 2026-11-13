@@ -964,8 +964,10 @@ if ($FormatterOverride -or ($fmtInteractive -and -not (Get-RcKey 'formatter_over
             continue
         }
         $fmtRc = 2
-        if (($fmtFile -in '.prettierrc', '.prettierrc.json', 'package.json', '.oxfmtrc.json') -and (Get-Command node -ErrorAction SilentlyContinue)) {
-            & (Get-Command node -TotalCount 1) -e $WmkFmtNode -- (Join-Path $TargetDir $fmtFile) $FmtGlob
+        # Called through the resolved command, not `& node`: PSUseCompatibleCommands flags a bare `node` on 5.1's profile.
+        $node = Get-Command node -TotalCount 1 -ErrorAction SilentlyContinue
+        if (($fmtFile -in '.prettierrc', '.prettierrc.json', 'package.json', '.oxfmtrc.json') -and $node) {
+            & $node -e $WmkFmtNode -- (Join-Path $TargetDir $fmtFile) $FmtGlob
             $fmtRc = $LASTEXITCODE
         }
         switch ($fmtRc) {
