@@ -1057,10 +1057,10 @@ fmt_configs() {
 # run that hasn't recorded an answer asks; confirm would silently take its
 # default with no tty, so headless skips and leaves the question for later.
 # An rc or typed dir can carry Windows separators; formatter globs only match "/".
-# Prettier 3 doesn't match a glob with "//" against the real path.
-fmt_dir="${WM_DIR//\\//}"
-while [[ $fmt_dir == *//* ]]; do fmt_dir="${fmt_dir//\/\///}"; done
-FMT_GLOB="$fmt_dir/**/*.md"
+# Prettier 3 doesn't match a glob with "//" against the real path. The collapse runs
+# on the whole glob, since the trim leaves one "/" on a dir typed as "a/b//".
+FMT_GLOB="${WM_DIR//\\//}/**/*.md"
+while [[ $FMT_GLOB == *//* ]]; do FMT_GLOB="${FMT_GLOB//\/\///}"; done
 FMT_RESULT=""
 if [ -n "$FORMATTER_OVERRIDE" ] || { [ -n "$TTY_FD" ] && [ -z "$(read_rc formatter_override "")" ]; }; then
   while IFS= read -r fmt_file; do

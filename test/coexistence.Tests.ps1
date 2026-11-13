@@ -314,7 +314,7 @@ Describe 'formatter override' {
     }
 
     It 'a dir with a trailing slash gets a single-slash glob (#67)' {
-        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="a/b/"'
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="a/b//"'
         Set-Content .prettierrc '{}'
         Invoke-Installer --formatter-override | Out-Null
         Get-Override .prettierrc | Should -Be '1 a/b/**/*.md preserve'

@@ -363,7 +363,7 @@ rc_has_fmt_key() { grep -qs '^formatter_override=' .working-memoryrc; }
 }
 
 @test "a dir with a trailing slash gets a single-slash glob (#67)" {
-  printf 'WORKING_MEMORY_DIR="a/b/"\n' > .working-memoryrc
+  printf 'WORKING_MEMORY_DIR="a/b//"\n' > .working-memoryrc
   printf '{}\n' > .prettierrc
   run run_installer --formatter-override
   [ "$status" -eq 0 ]
