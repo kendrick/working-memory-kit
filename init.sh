@@ -223,6 +223,8 @@ my $block = do { local $/; <$bf> }; close $bf;
 $block =~ s/\n+\z//;
 open my $df, "<", $ENV{WMK_DST} or die "dst: $!";
 my $doc = do { local $/; <$df> }; close $df;
+# Like init.ps1 (#70), edit only the text after a leading BOM and write the BOM back.
+my $bom = $doc =~ s/\A\xEF\xBB\xBF//;
 my ($qs, $qe) = (quotemeta($start), quotemeta($end));
 
 if ($doc =~ /$qs/) {
@@ -255,7 +257,7 @@ else {
     else { $doc =~ s/\n*\z//; $doc = "$doc\n\n$block\n"; }
 }
 open my $out, ">", $ENV{WMK_DST} or die "write: $!";
-print $out $doc; close $out;
+print $out ($bom ? "\xEF\xBB\xBF" : ""), $doc; close $out;
 '
 
 # Pull the START..END span (inclusive) out of a fenced template, to splice into
@@ -299,7 +301,10 @@ WMK_HOOKS_PERL='
 my $json = JSON::PP->new->utf8->canonical;
 sub slurp { open my $f, "<", $_[0] or die "$_[0]: $!"; local $/; my $s = <$f>; close $f; $s }
 my $src = $json->decode(slurp($ENV{WMK_SRC}));
-my $dst = eval { $json->decode(slurp($ENV{WMK_DST})) };
+# JSON::PP rejects a leading BOM, so decode the text after it and write the BOM back, as init.ps1 does (#70).
+my $dsrc = slurp($ENV{WMK_DST});
+my $bom = $dsrc =~ s/\A\xEF\xBB\xBF//;
+my $dst = eval { $json->decode($dsrc) };
 exit 3 unless ref $dst eq "HASH";
 $dst->{hooks} //= {};
 exit 3 unless ref $dst->{hooks} eq "HASH";
@@ -335,7 +340,7 @@ for my $event (sort keys %{ $src->{hooks} }) {
 
 exit 10 if $json->encode($dst) eq $before;
 open my $out, ">", $ENV{WMK_DST} or die "write: $!";
-print $out JSON::PP->new->utf8->pretty->space_before(0)->canonical->indent_length(2)->encode($dst);
+print $out ($bom ? "\xEF\xBB\xBF" : ""), JSON::PP->new->utf8->pretty->space_before(0)->canonical->indent_length(2)->encode($dst);
 close $out;
 '
 
