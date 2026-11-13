@@ -254,6 +254,13 @@ teardown() { teardown_repo; }
   [ "$status" -eq 0 ]
   echo "$output" | grep -q 'WORKING_MEMORY_DIR'
   [ ! -d ../outside ]
+  # #52: the rejected line stays byte-for-byte, so the next run warns again.
+  [ "$(cat .working-memoryrc)" = 'WORKING_MEMORY_DIR="../outside"' ]
+  # $(cat) strips trailing newlines, so the byte count is what catches a changed final newline.
+  [ "$(wc -c < .working-memoryrc | tr -d ' ')" -eq 32 ]
+  run run_installer
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q 'ignoring WORKING_MEMORY_DIR'
 }
 
 @test "an absolute rc dir is refused and nothing is created there (#43)" {
