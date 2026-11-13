@@ -963,7 +963,7 @@ if ($FormatterOverride -or ($fmtInteractive -and -not (Get-RcKey 'formatter_over
         }
         $fmtRc = 2
         if (($fmtFile -in '.prettierrc', '.prettierrc.json', 'package.json', '.oxfmtrc.json') -and (Get-Command node -ErrorAction SilentlyContinue)) {
-            & node -e $WmkFmtNode -- (Join-Path $TargetDir $fmtFile) $FmtGlob
+            & (Get-Command node -TotalCount 1) -e $WmkFmtNode -- (Join-Path $TargetDir $fmtFile) $FmtGlob
             $fmtRc = $LASTEXITCODE
         }
         switch ($fmtRc) {

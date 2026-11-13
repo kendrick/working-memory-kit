@@ -53,3 +53,17 @@ jobs:
           Install-Module Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck -Scope CurrentUser
           Import-Module Pester -MinimumVersion 5.5.0
           Invoke-Pester -Path test/ -CI
+
+  # Catches pwsh-7-only syntax and cmdlets in the Windows scripts without waiting on a 5.1 runner.
+  psscriptanalyzer:
+    name: psscriptanalyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # -Path takes one string, so each target gets its own call.
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $r = 'init.ps1', 'template/scripts' | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Settings ./PSScriptAnalyzerSettings.psd1 }
+          if ($r) { $r | Format-Table -AutoSize | Out-String -Width 200 | Write-Host; exit 1 }
