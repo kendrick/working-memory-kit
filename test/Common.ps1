@@ -43,6 +43,15 @@ function Invoke-Installer {
     return (& (Join-Path $KitRoot 'init.ps1') @passed --yes *>&1 | Out-String -Width 4096)
 }
 
+# Run the installer under a pty and type $answers at its prompts. It passes no --yes, since only a
+# tty without --yes reaches the working-memory-dir prompt. Needs python3 and a Unix pty, so callers skip on Windows.
+function Invoke-InstallerTty ($answers) {
+    $vars = 'WMK_TTY_INPUT', 'WMK_KIT', 'WMK_INSTALLER', 'NO_COLOR'
+    $env:WMK_TTY_INPUT = $answers; $env:WMK_KIT = $KitRoot; $env:WMK_INSTALLER = 'ps1'; $env:NO_COLOR = '1'
+    try { return (python3 (Join-Path $KitRoot 'test/pty_run.py') *>&1 | Out-String -Width 4096) }
+    finally { foreach ($v in $vars) { Remove-Item "Env:$v" -ErrorAction SilentlyContinue } }
+}
+
 # Run the session-end hook; return its stdout (the nudge JSON, or empty).
 function Invoke-SessionEndHook {
     return (& (Join-Path $KitRoot 'template/scripts/working-memory-session-end.ps1') 2>$null | Out-String)

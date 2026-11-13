@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Run init.sh under a pseudo-tty, feeding canned answers to its prompts.
+"""Run init.sh (or init.ps1 when WMK_INSTALLER=ps1) under a pseudo-tty, feeding canned answers to its prompts.
 
 The Upgrade/Cancel menu (and the working-memory-dir prompt) only fire when the
 installer sees a real tty, so bats can't reach them through a closed stdin. This
 allocates a pty, writes the canned keystrokes from $WMK_TTY_INPUT up front, and
 relays the child's combined output. Kept as a file (not a bash heredoc) so the
-quoting stays sane. Used only by run_installer_tty in helpers.bash.
+quoting stays sane. Used by run_installer_tty in helpers.bash and, with
+WMK_INSTALLER=ps1, by Invoke-InstallerTty in Common.ps1.
 """
 import os
 import pty
@@ -20,6 +21,8 @@ args = sys.argv[1:]
 
 pid, fd = pty.fork()
 if pid == 0:
+    if os.environ.get("WMK_INSTALLER", "sh") == "ps1":
+        os.execvp("pwsh", ["pwsh", "-NoProfile", "-File", os.path.join(kit, "init.ps1"), *args])
     os.execvp("bash", ["bash", os.path.join(kit, "init.sh"), *args])
 
 if feed:
@@ -36,6 +39,10 @@ try:
         if not data:
             break
         out += data
+        # pwsh's Read-Host asks the terminal for the cursor position (ESC[6n) and blocks until
+        # something answers; bash never sends this, so bats callers are unaffected.
+        if b"\x1b[6n" in data:
+            os.write(fd, b"\x1b[1;1R")
 except OSError:
     # macOS raises EIO on the master once the slave closes; that's just EOF.
     pass
