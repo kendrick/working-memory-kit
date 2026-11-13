@@ -332,8 +332,8 @@ Describe 'installer' {
         @($s['env'].Keys) -join ',' | Should -BeExactly 'Path,PATH'
         $s['env']['Path'] | Should -BeExactly 'a'
         $s['env']['PATH'] | Should -BeExactly 'b'
-        $s['hooks'].Contains('SessionStart') | Should -BeTrue
-        $s['hooks'].Contains('SessionEnd') | Should -BeTrue
+        $s['hooks']['SessionStart'] | Should -Not -BeNullOrEmpty
+        $s['hooks']['SessionEnd'] | Should -Not -BeNullOrEmpty
     }
 
     It 'a lowercase sessionstart event is left alone and the kit hook goes under SessionStart (#54)' {
@@ -369,7 +369,7 @@ Describe 'installer' {
         Invoke-Installer | Out-Null
         $text = [IO.File]::ReadAllText((Join-Path (Get-Location) '.claude/settings.json'), [Text.UTF8Encoding]::new($false))
         (ConvertFrom-JsonExact $text)['env']['NAME'] | Should -BeExactly $cafe
-        (ConvertFrom-JsonExact $text)['hooks'].Contains('SessionStart') | Should -BeTrue
+        (ConvertFrom-JsonExact $text)['hooks']['SessionStart'] | Should -Not -BeNullOrEmpty
     }
 
     It 'a large integer in settings.json keeps its digits through the merge (#54)' {

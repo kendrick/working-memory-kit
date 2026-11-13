@@ -269,7 +269,10 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
 # perl reads them; ConvertFrom-Json folds keys that differ only by case (#54).
 # -AsHashtable is PS 6+, so 5.1 (#48) gets JavaScriptSerializer, whose
 # Dictionary[string,object] is ordinal and keeps insertion order.
-function ConvertFrom-JsonExact ($text) {
+function ConvertFrom-JsonExact {
+    # The 5.1 lint profile can't see the version check that keeps -AsHashtable off 5.1.
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '', Justification = 'PS 6+ branch only')]
+    param($text)
     if ($PSVersionTable.PSVersion.Major -ge 6) { return , ($text | ConvertFrom-Json -AsHashtable) }
     Add-Type -AssemblyName System.Web.Extensions
     $serializer = [System.Web.Script.Serialization.JavaScriptSerializer]::new()
@@ -292,22 +295,22 @@ function Merge-ClaudeHooks ($src, $dst) {
         return
     }
     $invalid = "$dst is not valid JSON (or not the settings shape Claude Code reads); left it as-is. Fix it and re-run to get the working-memory hooks."
-    $dict = [System.Collections.IDictionary]
-    $list = [System.Collections.IList]
+    $dictType = [System.Collections.IDictionary]
+    $listType = [System.Collections.IList]
     $raw = Read-Utf8Text $dst
     # The leading-brace check catches a top-level array, which PS 7 would
     # enumerate into a lone object and slip past the type check below.
     if (-not $raw.TrimStart().StartsWith('{')) { Write-Warn $invalid; return }
     try { $settings = ConvertFrom-JsonExact $raw } catch { Write-Warn $invalid; return }
-    if ($settings -isnot $dict) { Write-Warn $invalid; return }
+    if ($settings -isnot $dictType) { Write-Warn $invalid; return }
     if ($null -eq $settings['hooks']) { $settings['hooks'] = [ordered]@{} }
     $hooks = $settings['hooks']
-    if ($hooks -isnot $dict) { Write-Warn $invalid; return }
+    if ($hooks -isnot $dictType) { Write-Warn $invalid; return }
     foreach ($evName in @($hooks.Keys)) {
         $ev = $hooks[$evName]
-        if ($ev -isnot $list -or $ev -is $dict) { Write-Warn $invalid; return }
+        if ($ev -isnot $listType -or $ev -is $dictType) { Write-Warn $invalid; return }
         foreach ($g in $ev) {
-            if ($g -isnot $dict -or ($null -ne $g['hooks'] -and ($g['hooks'] -isnot $list -or $g['hooks'] -is $dict))) { Write-Warn $invalid; return }
+            if ($g -isnot $dictType -or ($null -ne $g['hooks'] -and ($g['hooks'] -isnot $listType -or $g['hooks'] -is $dictType))) { Write-Warn $invalid; return }
         }
     }
     # Depth 20: the default of 2 flattens nested values (permissions, hooks) to strings.
@@ -327,7 +330,7 @@ function Merge-ClaudeHooks ($src, $dst) {
                     if ($null -eq $g['hooks']) { $keptGroups += $g; continue }
                     $kept = @()
                     foreach ($h in $g['hooks']) {
-                        if ($h -is $dict -and "$($h['command'])" -match $pattern) {
+                        if ($h -is $dictType -and "$($h['command'])" -match $pattern) {
                             if ($found) { continue }
                             $found = $true
                             $h = $kit

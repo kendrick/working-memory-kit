@@ -76,7 +76,7 @@ function Test-XrefInsideFence {
     return $inside
 }
 
-# A copy of init.ps1's ConvertFrom-JsonExact, since dot-sourcing init.ps1 would run the installer.
+# A copy of init.ps1's ConvertFrom-JsonExact (keep in sync), since dot-sourcing init.ps1 would run the installer.
 # ConvertFrom-Json folds keys that differ only by case, which is the #54 bug these tests look for.
 function ConvertFrom-JsonExact ($text) {
     if ($PSVersionTable.PSVersion.Major -ge 6) { return , ($text | ConvertFrom-Json -AsHashtable) }
