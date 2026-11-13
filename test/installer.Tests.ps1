@@ -232,9 +232,14 @@ Describe 'installer' {
     It 'a default install writes no .working-memoryrc; an escaping rc dir is refused (#43)' {
         Invoke-Installer | Out-Null
         '.working-memoryrc' | Should -Not -Exist
-        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="../outside"'
+        $rcPath = Join-Path (Get-Location) '.working-memoryrc'
+        [IO.File]::WriteAllText($rcPath, "WORKING_MEMORY_DIR=`"../outside`"`n")
+        $before = [IO.File]::ReadAllBytes($rcPath)
         Invoke-Installer | Should -Match 'WORKING_MEMORY_DIR'
         '../outside' | Should -Not -Exist
+        # #52: the rejected line stays byte-for-byte, so the next run warns again.
+        [IO.File]::ReadAllBytes($rcPath) | Should -Be $before
+        Invoke-Installer | Should -Match 'ignoring WORKING_MEMORY_DIR'
     }
 
     It 'a rooted rc dir (leading backslash) is refused and the default is used (#43)' {

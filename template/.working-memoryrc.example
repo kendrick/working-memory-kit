@@ -48,5 +48,7 @@ NUDGE_LINE_THRESHOLD=200
 # The installer writes this when you choose a dir other than the default at install.
 # Re-runs, headless ones included, reuse that dir. An absolute path (/x, \x, or C:\x)
 # or one with a ".." segment or any character outside letters, digits, and . _ - / \
-# is rejected with a warning, and the default is used.
+# is rejected with a warning, and the default is used. The rejected line stays in the
+# file, and every run warns until someone fixes or deletes it. That warning is how
+# whoever committed the value finds out.
 # WORKING_MEMORY_DIR="_working-memory"
