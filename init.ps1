@@ -17,6 +17,24 @@ function Write-Ok   ($msg) { Write-Host "[ok] $msg"   -ForegroundColor Green }
 function Write-Warn ($msg) { Write-Host "[warn] $msg" -ForegroundColor Yellow }
 function Write-Fail ($msg) { Write-Host "[error] $msg" -ForegroundColor Red }
 
+# 5.1's content cmdlets default to the ANSI code page, and its -Encoding UTF8 always adds a BOM, so every file the installer edits goes through these two helpers.
+# [IO.File] resolves relative paths against the process CWD, not PowerShell's location, hence the resolve.
+function Read-Utf8Text ($path) {
+    $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($path)
+    return [IO.File]::ReadAllText($full, [Text.UTF8Encoding]::new($false))
+}
+
+# Keeps an existing file's BOM state; a new file gets none, matching init.sh.
+function Write-Utf8Text ($path, $text) {
+    $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($path)
+    $bom = $false
+    if ([IO.File]::Exists($full)) {
+        $b = [IO.File]::ReadAllBytes($full)
+        $bom = $b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF
+    }
+    [IO.File]::WriteAllText($full, $text, [Text.UTF8Encoding]::new($bom))
+}
+
 # Styling parity with init.sh: a modern truecolor palette when the terminal can
 # render it, plain (ASCII box, no escapes) whenever output is redirected (CI, the
 # test suite) or NO_COLOR is set. Only chrome (banner, menu box) is painted; the
@@ -140,7 +158,7 @@ function Install-Machinery ($src, $dst) {
 # stacking on repeated runs, which byte-stability relies on.
 function Add-KitnewPointer ($dst) {
     $base = Split-Path $dst -Leaf
-    $raw = [IO.File]::ReadAllText($dst)
+    $raw = Read-Utf8Text $dst
     if ($raw.Contains($KitnewSentinel)) { return }
     $open = ''; $close = ''
     if     ($dst -match '\.md(\.example)?$')              { $open = '<!-- '; $close = ' -->' }
@@ -157,7 +175,7 @@ function Add-KitnewPointer ($dst) {
     if ($after -ge $lines.Count) { $new = @($lines) + $note }
     elseif ($after -gt 0)        { $new = @($lines[0..($after - 1)]) + $note + @($lines[$after..($lines.Count - 1)]) }
     else                         { $new = @($note) + @($lines) }
-    [IO.File]::WriteAllText($dst, ($new -join "`n"))
+    Write-Utf8Text $dst ($new -join "`n")
 }
 
 # w-m-k owns one fenced section in each agent file. A (re)install only reads and
@@ -190,11 +208,11 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
     if (-not (Test-Path $dst)) {
         $parent = Split-Path $dst -Parent
         if ($parent -and -not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-        Set-Content -Path $dst -Value $freshContent -NoNewline
+        Write-Utf8Text $dst $freshContent
         Write-Ok "created $dst"
         return
     }
-    $rawDoc = Get-Content $dst -Raw
+    $rawDoc = Read-Utf8Text $dst
     if ($null -eq $rawDoc) { $rawDoc = '' }
     # Normalized copy: used only for detection and the line parsing below. Every
     # write splices into $rawDoc, so text outside our markers keeps its endings.
@@ -243,7 +261,7 @@ function Set-FencedSection ($dst, $freshContent, $block, $position, $sentinel = 
         if ($position -eq 'prepend') { $doc = "$blk`n`n$rawDoc" }
         else { $doc = ($rawDoc -replace '\s+$', '') + "`n`n$blk`n" }
     }
-    Set-Content -Path $dst -Value $doc -NoNewline
+    Write-Utf8Text $dst $doc
     Write-Ok "updated working-memory section in $dst"
 }
 
@@ -419,17 +437,17 @@ function Get-RcKey ($key, $default) {
 function Set-RcKey ($key, $value) {
     $file = Join-Path $TargetDir '.working-memoryrc'
     $newLine = "$key=$value"
-    if ((Test-Path $file) -and ((Get-Content $file) -match "^$key=")) {
-        $content = Get-Content $file | ForEach-Object { if ($_ -match "^$key=") { $newLine } else { $_ } }
-        Set-Content -Path $file -Value $content
+    $raw = if (Test-Path $file) { Read-Utf8Text $file } else { '' }
+    # [^\r\n]* rather than .*, which would eat a CRLF line's \r.
+    $pattern = "(?m)^$([regex]::Escape($key))=[^\r\n]*"
+    if ($raw -match $pattern) {
+        $raw = [regex]::Replace($raw, $pattern, $newLine.Replace('$', '$$'))
     } else {
         # An rc last edited by a tool that drops the final newline would glue the key onto its last line.
-        if (Test-Path $file) {
-            $raw = Get-Content $file -Raw
-            if ($raw -and -not $raw.EndsWith("`n")) { Add-Content -Path $file -Value '' }
-        }
-        Add-Content -Path $file -Value $newLine
+        if ($raw -and -not $raw.EndsWith("`n")) { $raw += "`n" }
+        $raw += "$newLine`n"
     }
+    Write-Utf8Text $file $raw
 }
 
 # The rc can arrive in someone else's commit, so refuse a value that would write outside the repo or break out of a rendered hook.
@@ -690,7 +708,7 @@ if (-not (Test-Path "$WmDir/activeContext.md")) {
 # load-bearing: against a -Raw whole-file string, ^ anchors to the start of the
 # string, not each line (unlike grep), so without it this guard never fires and
 # the Stack section silently goes un-prefilled.
-if ($Stack.Language -and (Get-Content "$WmDir/projectOverview.md" -Raw) -match '(?m)^_To be filled\._') {
+if ($Stack.Language -and (Read-Utf8Text "$WmDir/projectOverview.md") -match '(?m)^_To be filled\._') {
     $repoName = Split-Path $TargetDir -Leaf
     $dirs = (Get-ChildItem -Directory | Select-Object -First 20 | ForEach-Object { "- $($_.Name)" }) -join "`n"
     $fwLine = if ($Stack.Framework) { $Stack.Framework } else { '_(none detected)_' }
@@ -718,7 +736,7 @@ $dirs
 <!-- Non-obvious things an agent must know: monorepo rules, legacy code -->
 <!-- boundaries, API version requirements, browser support, etc. -->
 "@
-    Set-Content -Path "$WmDir/projectOverview.md" -Value $overview
+    Write-Utf8Text "$WmDir/projectOverview.md" "$overview`n"
     Write-Ok "pre-populated $WmDir/projectOverview.md with detected stack"
 }
 
@@ -730,12 +748,12 @@ $dirs
 $convFile = Join-Path $TargetDir "$WmDir/conventions.md"
 $principlesNeighbor = $Neighbors | Where-Object { $_.Kind -eq 'process' -and $_.Principles } | Select-Object -First 1
 if ($principlesNeighbor -and (Test-Path $convFile)) {
-    $conv = Get-Content $convFile -Raw
+    $conv = Read-Utf8Text $convFile
     if ($conv -notmatch 'coexistence:principles') {
         $note = "<!-- coexistence:principles -->`n> Project principles live in ``$($principlesNeighbor.Principles)`` ($($principlesNeighbor.Name)). Keep this file to tactical patterns; don't restate principles."
         $anchor = '<!-- This is the "how we do things here" file. -->'
         $conv = $conv -replace [regex]::Escape($anchor), "$anchor`n`n$note"
-        Set-Content -Path $convFile -Value $conv -NoNewline
+        Write-Utf8Text $convFile $conv
         Write-Ok "pointed $WmDir/conventions.md at $($principlesNeighbor.Name) principles ($($principlesNeighbor.Principles))"
     }
 }
@@ -750,7 +768,7 @@ Install-Machinery (Join-Path $Template '.working-memoryrc.example') `
 
 # ---------- AGENTS.md ----------
 
-$agentsTemplate = Get-Content (Join-Path $Template 'AGENTS.md') -Raw
+$agentsTemplate = Read-Utf8Text (Join-Path $Template 'AGENTS.md')
 # Fold the neighbor cross-reference into the template's fenced section up front,
 # so both the fresh-copy and splice paths read the same source and re-installs
 # stay idempotent.
@@ -767,13 +785,13 @@ Set-FencedSection (Join-Path $TargetDir 'AGENTS.md') $agentsTemplate $agentsBloc
 # leave the section alone on re-runs.
 if ($Stack.Language) {
     $agentsPath = Join-Path $TargetDir 'AGENTS.md'
-    $agentsContent = Get-Content $agentsPath -Raw
+    $agentsContent = Read-Utf8Text $agentsPath
     $stackMarker = '<!-- One line per layer. Detected from project. -->'
     if ($agentsContent -like "*$stackMarker*") {
         $stackBlock = "- Language: $($Stack.Language)"
         if ($Stack.Framework) { $stackBlock += "`n- Framework: $($Stack.Framework)" }
         $agentsContent = $agentsContent -replace [regex]::Escape($stackMarker), $stackBlock
-        Set-Content -Path $agentsPath -Value $agentsContent -NoNewline
+        Write-Utf8Text $agentsPath $agentsContent
         Write-Ok 'pre-populated AGENTS.md Stack with detected stack'
     }
 }
@@ -856,7 +874,7 @@ Install-Machinery (Join-Path $Template '.github/hooks/working-memory-hooks.json'
 Install-Machinery (Join-Path $Template '.github/instructions/working-memory.instructions.md.example') `
                   (Join-Path $TargetDir '.github/instructions/working-memory.instructions.md.example')
 
-$copilotTemplate = Get-Content (Join-Path $Template '.github/copilot-instructions.md') -Raw
+$copilotTemplate = Read-Utf8Text (Join-Path $Template '.github/copilot-instructions.md')
 $copilotBlock = Get-FencedBlock $copilotTemplate
 Set-FencedSection (Join-Path $TargetDir '.github/copilot-instructions.md') $copilotTemplate $copilotBlock 'prepend' 'To sync working memory'
 
@@ -878,15 +896,15 @@ Write-Info 'shell scripts: PowerShell does not need chmod. On Unix systems, run:
 $gitignore = '.gitignore'
 $line = "$WmDir/activeContext.md"
 if (Test-Path $gitignore) {
-    $content = Get-Content $gitignore
-    if ($content -contains $line) {
+    $content = Read-Utf8Text $gitignore
+    if (($content -split '\r?\n') -contains $line) {
         Write-Info '.gitignore already excludes activeContext.md'
     } else {
-        Add-Content $gitignore "`n# Local-only active context (working-memory-kit)`n$line"
+        Write-Utf8Text $gitignore "$content`n# Local-only active context (working-memory-kit)`n$line`n"
         Write-Ok 'added activeContext.md to .gitignore'
     }
 } else {
-    Set-Content $gitignore "# Local-only active context (working-memory-kit)`n$line"
+    Write-Utf8Text $gitignore "# Local-only active context (working-memory-kit)`n$line`n"
     Write-Ok 'created .gitignore with activeContext.md entry'
 }
 
@@ -998,13 +1016,13 @@ if ($WmDir -ne $WmDirDefault) {
     foreach ($f in $filesToSub) {
         $full = Join-Path $TargetDir $f
         if (Test-Path $full) {
-            $content = Get-Content $full -Raw
+            $content = Read-Utf8Text $full
             # Single broad pattern catches every form: trailing slash, backslash,
             # closing quote in scripts, end of line. The token "_working-memory"
             # only ever appears as the install path; script filenames, env vars,
             # and .working-memoryrc do not collide.
             $content = $content.Replace('_working-memory', $WmDir)
-            Set-Content -Path $full -Value $content -NoNewline
+            Write-Utf8Text $full $content
         }
     }
 }

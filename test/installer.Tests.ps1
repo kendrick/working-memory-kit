@@ -341,6 +341,33 @@ Describe 'installer' {
         }
         Get-Content AGENTS.md -Raw | Should -Match 'status: superseded'
     }
+
+    # ---- 5.1's content cmdlets write the ANSI code page and drop or add a BOM (#70).
+    # Fixtures go in as bytes and assertions read bytes, so no PowerShell encoding default touches either side. ----
+
+    It 'a UTF-8 CLAUDE.md <Label> a BOM keeps its bytes outside the fence (#70)' -ForEach @(
+        @{ Label = 'with'; Bom = $true }, @{ Label = 'without'; Bom = $false }
+    ) {
+        $utf8 = [Text.UTF8Encoding]::new($false)
+        $bomBytes = if ($Bom) { [byte[]](0xEF, 0xBB, 0xBF) } else { [byte[]]@() }
+        $prefix = $bomBytes + $utf8.GetBytes("# Caf$([char]0xE9) $([char]0x2264) notes`n`n")
+        $suffix = $utf8.GetBytes("`n`nTail $([char]0x2264) caf$([char]0xE9).`n")
+        $fence = $utf8.GetBytes("<!-- working-memory:start -->`nold`n<!-- working-memory:end -->")
+        [IO.File]::WriteAllBytes((Join-Path (Get-Location) 'CLAUDE.md'), [byte[]]($prefix + $fence + $suffix))
+        Invoke-Installer | Out-Null
+        $out = [IO.File]::ReadAllBytes((Join-Path (Get-Location) 'CLAUDE.md'))
+        $start = $utf8.GetBytes('<!-- working-memory:start -->')
+        [BitConverter]::ToString($out, 0, $prefix.Length + $start.Length) | Should -Be ([BitConverter]::ToString([byte[]]($prefix + $start)))
+        [BitConverter]::ToString($out, $out.Length - $suffix.Length) | Should -Be ([BitConverter]::ToString($suffix))
+    }
+
+    It 'fresh install writes AGENTS.md and CLAUDE.md without a BOM (#70)' {
+        Invoke-Installer | Out-Null
+        foreach ($f in 'AGENTS.md', 'CLAUDE.md') {
+            $b = [IO.File]::ReadAllBytes((Join-Path (Get-Location) $f))
+            [BitConverter]::ToString($b, 0, 3) | Should -Not -Be 'EF-BB-BF'
+        }
+    }
 }
 
 # Windows PowerShell 5.1 reads a BOM-less script as ANSI, so a non-ASCII literal can
