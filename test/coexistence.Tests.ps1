@@ -296,6 +296,37 @@ Describe 'formatter override' {
         Get-Override .prettierrc | Should -Be '1 mem/**/*.md preserve'
     }
 
+    It 'a dir typed with a doubled slash gets a single-slash glob (#67)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="a//b"'
+        Set-Content .prettierrc '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .prettierrc | Should -Be '1 a/b/**/*.md preserve'
+        Remove-TestRepo $repo; $script:repo = New-TestRepo
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="a/b"'
+        Set-Content .prettierrc '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .prettierrc | Should -Be '1 a/b/**/*.md preserve'
+        Remove-TestRepo $repo; $script:repo = New-TestRepo
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="a/c"'
+        Set-Content .prettierrc '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .prettierrc | Should -Be '1 a/c/**/*.md preserve'
+    }
+
+    It 'a dir with a trailing slash gets a single-slash glob (#67)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="a/b//"'
+        Set-Content .prettierrc '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .prettierrc | Should -Be '1 a/b/**/*.md preserve'
+    }
+
+    It 'a backslash beside a slash collapses after the swap (#67)' {
+        Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="docs\/memory"'
+        Set-Content .prettierrc '{}'
+        Invoke-Installer --formatter-override | Out-Null
+        Get-Override .prettierrc | Should -Be '1 docs/memory/**/*.md preserve'
+    }
+
     It 'a dir with a backslash gets a forward-slash glob (#44)' {
         Set-Content .working-memoryrc 'WORKING_MEMORY_DIR="docs\memory"'
         Set-Content .prettierrc '{}'
