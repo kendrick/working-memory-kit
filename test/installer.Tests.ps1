@@ -326,7 +326,8 @@ Describe 'installer' {
         foreach ($log in $logs) {
             Select-String -Path $log -Pattern '^<!-- ## YYYY-MM-DD: ' | Should -Not -BeNullOrEmpty
         }
-        Get-Content _working-memory/antipatterns.md -Raw | Should -Not -Match ([char]0x2014)
+        # 5.1 reads BOM-less UTF-8 as ANSI, where an em dash isn't [char]0x2014 and this would pass vacuously.
+        Get-Content _working-memory/antipatterns.md -Raw -Encoding UTF8 | Should -Not -Match ([char]0x2014)
     }
 
     It 'fresh install: both log templates show a status line directly under the example heading (#39)' {
@@ -339,5 +340,18 @@ Describe 'installer' {
             Get-Content $log -Raw | Should -Match 'superseded_by'
         }
         Get-Content AGENTS.md -Raw | Should -Match 'status: superseded'
+    }
+}
+
+# Windows PowerShell 5.1 reads a BOM-less script as ANSI, so a non-ASCII literal can
+# decode to a curly quote that ends a string. Parsing as Windows-1252 catches that on
+# any engine, including update-working-memory.ps1, which no other test runs.
+Describe 'shipped scripts under 5.1' {
+    It '<_> parses when read as Windows-1252' -ForEach @('init.ps1', 'template/scripts/update-working-memory.ps1',
+        'template/scripts/working-memory-session-start.ps1', 'template/scripts/working-memory-session-end.ps1') {
+        $text = [Text.Encoding]::GetEncoding(1252).GetString([IO.File]::ReadAllBytes((Join-Path $KitRoot $_)))
+        $errors = $null
+        [void][Management.Automation.Language.Parser]::ParseInput($text, [ref]$null, [ref]$errors)
+        $errors | Should -BeNullOrEmpty
     }
 }

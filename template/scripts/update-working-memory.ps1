@@ -1,10 +1,15 @@
 # Manual working memory sync trigger.
-# Works from any terminal — not tied to a specific AI tool.
+# Works from any terminal, not tied to a specific AI tool.
 # Prints a summary of working memory staleness for the developer to act on.
 
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (git rev-parse --show-toplevel 2>$null)
+# 5.1 turns a native command's redirected stderr into ErrorRecords, and 'Stop'
+# makes the first one throw even under 2>$null (e.g. outside a repo). Callers
+# go by git's output and $LASTEXITCODE instead.
+function Invoke-Git { $ErrorActionPreference = 'Continue'; git @args 2>$null }
+
+$repoRoot = (Invoke-Git rev-parse --show-toplevel)
 if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
 
 $wmDir = Join-Path $repoRoot '_working-memory'
@@ -49,7 +54,8 @@ if (Test-Path $activeContext) {
     $lines = (Get-Content $activeContext | Where-Object { $_.Trim() -ne '' }).Count
     Write-Host "activeContext.md: $lines non-empty lines (limit: $maxLines)"
 } else {
-    Write-Host "activeContext.md: MISSING — run: Copy-Item _working-memory\activeContext.example.md _working-memory\activeContext.md" -ForegroundColor Yellow
+    # [char] keeps this file ASCII: 5.1 reads it as ANSI, where a literal em dash ends the string.
+    Write-Host "activeContext.md: MISSING $([char]0x2014) run: Copy-Item _working-memory\activeContext.example.md _working-memory\activeContext.md" -ForegroundColor Yellow
 }
 
 # Last modified times
@@ -63,7 +69,7 @@ Get-ChildItem (Join-Path $wmDir '*.md') | ForEach-Object {
 # Recent change context
 Write-Host ""
 Write-Host "Recent changes (last 5 commits):"
-$diffOutput = git -C $repoRoot diff --stat HEAD~5 2>$null
+$diffOutput = Invoke-Git -C $repoRoot diff --stat HEAD~5
 if ($LASTEXITCODE -eq 0 -and $diffOutput) {
     Write-Host $diffOutput
 } else {

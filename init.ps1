@@ -48,7 +48,9 @@ function Paint ($role, $text) {
 function Write-Box ($role, [string[]] $lines) {
     $w = 0; foreach ($l in $lines) { if ($l.Length -gt $w) { $w = $l.Length } }
     if ($ColorMode -eq 'plain') { $tl='+';$tr='+';$bl='+';$br='+';$h='-';$v='|' }
-    else { $tl='╭';$tr='╮';$bl='╰';$br='╯';$h='─';$v='│' }
+    # Code points keep this file ASCII. 5.1 reads a BOM-less script as ANSI, where the UTF-8 bytes
+    # of the box characters decode to a curly single quote that ends the string and breaks the parse.
+    else { $tl=[string][char]0x256D;$tr=[string][char]0x256E;$bl=[string][char]0x2570;$br=[string][char]0x256F;$h=[string][char]0x2500;$v=[string][char]0x2502 }
     $rule = $h * ($w + 2)
     Write-Host (Paint $role "$tl$rule$tr")
     foreach ($l in $lines) {

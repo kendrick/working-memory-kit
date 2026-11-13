@@ -186,7 +186,8 @@ Describe 'session-end hook' {
             # Curly quotes are PowerShell quote delimiters; built from code points to keep this file ASCII.
             $apos = [char]0x2019; $lq = [char]0x201C; $rq = [char]0x201D
             $title = "It${apos}s ${lq}`$x${rq}"
-            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: $title"
+            # UTF8: 5.1's default is ANSI, which the hook (reading UTF-8, like every editor writes) would mangle.
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: $title" -Encoding UTF8
             $msg = (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage
             $msg | Should -BeExactly "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry 'It${apos}${apos}s ${lq}`$x${rq}'"
             function ltm { $args[3] }
