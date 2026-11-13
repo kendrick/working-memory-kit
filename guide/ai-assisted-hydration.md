@@ -28,13 +28,13 @@ AI should not:
 
 Five phases, each ending in something a person can review, or in nothing.
 
-| Phase            | Input                                  | Output                                                                                                       |
-| ---------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **1. discover**  | Repo state                             | Inventory of source locations: codebase files, manifests, README, ADRs folder if present, recent git history |
-| **2. extract**   | A specific source location             | Raw findings, one per detected fact, decision, convention, or contract                                       |
-| **3. draft**     | Raw findings                           | Filled sections of the six working memory files                                                              |
-| **4. reconcile** | Drafts + existing working memory state | Annotated: net-new, would-overwrite, conflicts-with-code                                                     |
-| **5. propose**   | Reconciled drafts                      | Staged commit, or PR for multi-developer projects, for human review                                          |
+| Phase            | Input                                  | Output                                                                                                                                                 |
+| ---------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **1. discover**  | Repo state                             | Inventory of source locations: codebase files, manifests, README, ADRs folder if present, recent git history                                           |
+| **2. extract**   | A specific source location             | Raw findings, one per detected fact, decision, convention, or contract                                                                                 |
+| **3. draft**     | Raw findings                           | Filled sections of the six working memory files; `scope: org` findings pass through                                                                    |
+| **4. reconcile** | Drafts + existing working memory state | Annotated: net-new, would-overwrite, conflicts-with-code                                                                                               |
+| **5. propose**   | Reconciled drafts                      | Staged commit, or PR for multi-developer projects, for human review; `scope: org` findings become `ltm propose` commands or `openQuestions.md` entries |
 
 Reference skills live in [`.claude/skills/`](../.claude/skills/). Each is a single `SKILL.md`, invocable as a project skill by both VS Code Copilot and Claude Code from that one location[^cross-tool-skills]. The composite [`hydrator`](../.claude/agents/hydrator.md) agent at `.claude/agents/hydrator.md` runs all five phases with the discipline rules enforced. Both tools read it natively. Invoke as `@hydrator` to run the full pipeline.
 
@@ -57,7 +57,7 @@ Pull findings from each source. Use deterministic parsing where possible (manife
 
 A finding is small: one sentence per detected fact, plus a pointer back to the source. Findings are not ready-to-write working memory yet; phase 3 shapes them.
 
-Extract also tags each finding `scope: repo` or `scope: org`, with a one-line `scope_reason`. A finding is `scope: org` when it names more than one repo or a governing team outside this repo's. Everything else is `scope: repo`. An `org` finding gets no working memory target.
+Extract also tags each finding `scope: repo` or `scope: org`, with a one-line `scope_reason`. A finding is `scope: org` when it names more than one repo or a governing team outside this repo's. Everything else is `scope: repo`.
 
 ### 3. draft
 
@@ -88,9 +88,9 @@ For greenfield projects, reconcile is trivial: every draft is net-new. Reconcile
 
 Surface drafts for human review. Standard mechanism: a single commit (or PR for multi-developer projects) that updates the relevant working memory files in a reviewable batch. `activeContext.md` is excluded; the developer drives that file by hand.
 
-Propose also handles the `scope: org` findings that draft and reconcile passed through. If none arrived, it says nothing about org memory. Otherwise what it does depends on whether `.ltm.yaml` sits at the repo root, the only signal that the repo is connected to a Bank. Having `ltm` on your PATH doesn't count.
+Propose also handles the `scope: org` findings that draft and reconcile passed through. If none arrived, it says nothing about org memory. Otherwise what it does depends on whether `.ltm.yaml` sits at the repo root, the only signal that the repo is connected to a Bank; `ltm` on your PATH doesn't count.
 
-- With `.ltm.yaml`, propose lists the findings under an "Org memory candidates" heading in its output. For each one it prints an `ltm propose` command in a `bash/zsh` block and a `PowerShell` block, since the shells quote differently. It writes a body file per finding to a temp directory outside the repo, so the file never joins the working memory commit. Propose never runs the commands. You run them yourself and add `--applies-to` if you want it.
+- With `.ltm.yaml`, propose lists the findings under an "Org memory candidates" heading in its output. For each one it prints an `ltm propose` command in a `bash/zsh` block and a `PowerShell` block, since the shells quote differently. It writes a body file per finding to a temp directory outside the repo, so the file never joins the working memory commit. Propose never runs the commands. The printed commands leave out `--applies-to`, so you run them yourself and add it.
 - Without `.ltm.yaml`, each finding becomes a "May belong in org memory" entry in `openQuestions.md`, staged in the same batch as the rest. A finding whose entry is already there is skipped, so a second run doesn't duplicate it.
 
 `ltm propose` and `ltm promote` are different routes. `ltm propose` takes a hydration finding that never entered working memory. `ltm promote` takes an entry already in working memory; see [The Bridge to a Bank](#the-bridge-to-a-bank).
