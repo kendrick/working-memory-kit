@@ -983,7 +983,8 @@ function Get-FmtConfigs {
 # run that hasn't recorded an answer asks; Confirm-Prompt would silently take its
 # default with no console, so headless skips and leaves the question for later.
 # An rc or typed dir can carry Windows separators; formatter globs only match "/".
-$FmtGlob = "$($WmDir.Replace('\', '/'))/**/*.md"
+# Prettier 3 doesn't match a glob with "//" against the real path.
+$FmtGlob = "$($WmDir.Replace('\', '/') -replace '/{2,}', '/')/**/*.md"
 $FmtResult = ''
 $fmtInteractive = -not ($NonInteractive -or [Console]::IsInputRedirected)
 if ($FormatterOverride -or ($fmtInteractive -and -not (Get-RcKey 'formatter_override' ''))) {

@@ -342,6 +342,51 @@ rc_has_fmt_key() { grep -qs '^formatter_override=' .working-memoryrc; }
   [ "$(override_of .prettierrc)" = "1 mem/**/*.md preserve" ]
 }
 
+@test "a dir typed with a doubled slash gets a single-slash glob (#67)" {
+  printf 'WORKING_MEMORY_DIR="a//b"\n' > .working-memoryrc
+  printf '{}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of .prettierrc)" = "1 a/b/**/*.md preserve" ]
+  teardown_repo; setup_repo
+  printf 'WORKING_MEMORY_DIR="a/b"\n' > .working-memoryrc
+  printf '{}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of .prettierrc)" = "1 a/b/**/*.md preserve" ]
+  teardown_repo; setup_repo
+  printf 'WORKING_MEMORY_DIR="a/c"\n' > .working-memoryrc
+  printf '{}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of .prettierrc)" = "1 a/c/**/*.md preserve" ]
+}
+
+@test "a dir with a trailing slash gets a single-slash glob (#67)" {
+  printf 'WORKING_MEMORY_DIR="a/b/"\n' > .working-memoryrc
+  printf '{}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of .prettierrc)" = "1 a/b/**/*.md preserve" ]
+}
+
+@test "a backslash beside a slash collapses after the swap (#67)" {
+  printf 'WORKING_MEMORY_DIR="docs\\/memory"\n' > .working-memoryrc
+  printf '{}\n' > .prettierrc
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of .prettierrc)" = "1 docs/memory/**/*.md preserve" ]
+}
+
+@test "a snippet-only Prettier config and an editable oxfmt config record added (#44)" {
+  printf 'proseWrap: always\n' > .prettierrc
+  printf '{}\n' > .oxfmtrc.json
+  run run_installer --formatter-override
+  [ "$status" -eq 0 ]
+  [ "$(override_of .oxfmtrc.json)" = "1 $FMT_GLOB preserve" ]
+  grep -qx 'formatter_override=added' .working-memoryrc
+}
+
 @test "a dir with a backslash gets a forward-slash glob (#44)" {
   printf 'WORKING_MEMORY_DIR="docs\\memory"\n' > .working-memoryrc
   printf '{}\n' > .prettierrc
