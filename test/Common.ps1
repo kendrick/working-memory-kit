@@ -43,13 +43,18 @@ function Invoke-Installer {
     return (& (Join-Path $KitRoot 'init.ps1') @passed --yes *>&1 | Out-String -Width 4096)
 }
 
-# Run the installer under a pty and type $answers at its prompts. It passes no --yes, since only a
-# tty without --yes reaches the working-memory-dir prompt. Needs python3 and a Unix pty, so callers skip on Windows.
+# Run the installer under a pty and type $answers at its prompts. It passes no --yes, since only
+# a tty without --yes reaches the working-memory-dir prompt. Needs python3 and a Unix pty, so
+# callers skip on Windows.
 function Invoke-InstallerTty ($answers) {
-    $vars = 'WMK_TTY_INPUT', 'WMK_KIT', 'WMK_INSTALLER', 'NO_COLOR'
-    $env:WMK_TTY_INPUT = $answers; $env:WMK_KIT = $KitRoot; $env:WMK_INSTALLER = 'ps1'; $env:NO_COLOR = '1'
-    try { return (python3 (Join-Path $KitRoot 'test/pty_run.py') *>&1 | Out-String -Width 4096) }
-    finally { foreach ($v in $vars) { Remove-Item "Env:$v" -ErrorAction SilentlyContinue } }
+    $set = [ordered]@{ WMK_TTY_INPUT = $answers; WMK_KIT = $KitRoot; WMK_INSTALLER = 'ps1'; NO_COLOR = '1' }
+    $prior = @{}
+    foreach ($k in $set.Keys) { $prior[$k] = [Environment]::GetEnvironmentVariable($k) }
+    try {
+        foreach ($k in $set.Keys) { [Environment]::SetEnvironmentVariable($k, $set[$k]) }
+        return (python3 (Join-Path $KitRoot 'test/pty_run.py') *>&1 | Out-String -Width 4096)
+    }
+    finally { foreach ($k in $set.Keys) { [Environment]::SetEnvironmentVariable($k, $prior[$k]) } }
 }
 
 # Run the session-end hook; return its stdout (the nudge JSON, or empty).

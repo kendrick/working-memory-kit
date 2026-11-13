@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Run init.sh (or init.ps1 when WMK_INSTALLER=ps1) under a pseudo-tty, feeding canned answers to its prompts.
+"""Run an installer under a pseudo-tty, feeding canned answers to its prompts.
+
+Runs init.sh, or init.ps1 when WMK_INSTALLER=ps1.
 
 The Upgrade/Cancel menu (and the working-memory-dir prompt) only fire when the
 installer sees a real tty, so bats can't reach them through a closed stdin. This
@@ -29,6 +31,7 @@ if feed:
     os.write(fd, feed)
 
 out = bytearray()
+answered = 0
 deadline = time.time() + 20
 try:
     while time.time() < deadline:
@@ -41,8 +44,9 @@ try:
         out += data
         # pwsh's Read-Host asks the terminal for the cursor position (ESC[6n) and blocks until
         # something answers; bash never sends this, so bats callers are unaffected.
-        if b"\x1b[6n" in data:
+        while out.count(b"\x1b[6n") > answered:
             os.write(fd, b"\x1b[1;1R")
+            answered += 1
 except OSError:
     # macOS raises EIO on the master once the slave closes; that's just EOF.
     pass
