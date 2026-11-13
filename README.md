@@ -74,6 +74,8 @@ curl -fsSL https://raw.githubusercontent.com/kendrick/working-memory-kit/main/in
 irm https://raw.githubusercontent.com/kendrick/working-memory-kit/main/init.ps1 | iex
 ```
 
+The Windows scripts need Windows PowerShell 5.1 or later, the version Windows ships with.
+
 A run against a fresh JS/TS project looks like this:
 
 ```
@@ -295,11 +297,14 @@ shellcheck init.sh template/scripts/*.sh
 
 # PowerShell: the parity suite for init.ps1 and the .ps1 hooks
 pwsh -c 'Install-Module Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck -Scope CurrentUser; Invoke-Pester -Path test/ -CI'
+
+# PowerShell 5.1 compatibility: prints nothing when init.ps1 and the .ps1 hooks are clean
+pwsh -c 'Install-Module PSScriptAnalyzer -Scope CurrentUser; "init.ps1", "template/scripts" | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Settings ./PSScriptAnalyzerSettings.psd1 }'
 ```
 
 bats runs through `npx` with no `package.json` and no per-OS install step. That's deliberate. The kit ships no manifest of its own, so Node stays a test-time tool and never becomes an install dependency for your project.
 
-CI runs bats on ubuntu and macOS, where macOS is there to catch BSD versus GNU divergence, and Pester on Windows and macOS. See [`test/README.md`](test/README.md) for how the fixtures are built.
+CI runs bats on ubuntu and macOS, where macOS is there to catch BSD versus GNU divergence, and Pester on Windows and macOS. A separate Windows job runs Pester under Windows PowerShell 5.1, and a PSScriptAnalyzer job on ubuntu checks 5.1 compatibility. Windows PowerShell 5.1 exists only on Windows, so contributors on macOS or Linux get that Pester run only in CI. See [`test/README.md`](test/README.md) for how the fixtures are built.
 
 ## Contributing
 
