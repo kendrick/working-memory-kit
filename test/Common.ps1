@@ -54,7 +54,7 @@ function Invoke-InstallerTty ($answers) {
         foreach ($k in $set.Keys) { [Environment]::SetEnvironmentVariable($k, $set[$k]) }
         return (python3 (Join-Path $KitRoot 'test/pty_run.py') *>&1 | Out-String -Width 4096)
     }
-    finally { foreach ($k in $set.Keys) { [Environment]::SetEnvironmentVariable($k, $prior[$k]) } }
+    finally { foreach ($k in $set.Keys) { [Environment]::SetEnvironmentVariable($k, $(if ($null -eq $prior[$k]) { [NullString]::Value } else { $prior[$k] })) } }
 }
 
 # Run the session-end hook; return its stdout (the nudge JSON, or empty).
