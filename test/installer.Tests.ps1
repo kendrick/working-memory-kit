@@ -361,11 +361,17 @@ Describe 'installer' {
         [BitConverter]::ToString($out, $out.Length - $suffix.Length) | Should -Be ([BitConverter]::ToString($suffix))
     }
 
+    # Only Set-FencedSection's write has a byte test, so this keeps every other site from sliding back to the ANSI cmdlets.
+    It 'init.ps1 writes no file through Set-Content or Add-Content (#70)' {
+        $src = [IO.File]::ReadAllText((Join-Path $KitRoot 'init.ps1'), [Text.UTF8Encoding]::new($false))
+        $src -split '\r?\n' | Where-Object { $_ -match 'Set-Content|Add-Content' } | Should -BeNullOrEmpty
+    }
+
     It 'fresh install writes AGENTS.md and CLAUDE.md without a BOM (#70)' {
         Invoke-Installer | Out-Null
         foreach ($f in 'AGENTS.md', 'CLAUDE.md') {
-            $b = [IO.File]::ReadAllBytes((Join-Path (Get-Location) $f))
-            [BitConverter]::ToString($b, 0, 3) | Should -Not -Be 'EF-BB-BF'
+            $bytes = [IO.File]::ReadAllBytes((Join-Path (Get-Location) $f))
+            [BitConverter]::ToString($bytes, 0, 3) | Should -Not -Be 'EF-BB-BF'
         }
     }
 }

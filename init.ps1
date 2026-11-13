@@ -29,8 +29,8 @@ function Write-Utf8Text ($path, $text) {
     $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($path)
     $bom = $false
     if ([IO.File]::Exists($full)) {
-        $b = [IO.File]::ReadAllBytes($full)
-        $bom = $b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF
+        $bytes = [IO.File]::ReadAllBytes($full)
+        $bom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
     }
     [IO.File]::WriteAllText($full, $text, [Text.UTF8Encoding]::new($bom))
 }
@@ -280,7 +280,7 @@ function Merge-ClaudeHooks ($src, $dst) {
     }
     $invalid = "$dst is not valid JSON (or not the settings shape Claude Code reads); left it as-is. Fix it and re-run to get the working-memory hooks."
     $obj = [System.Management.Automation.PSCustomObject]
-    $raw = [IO.File]::ReadAllText($dst)
+    $raw = Read-Utf8Text $dst
     # The leading-brace check catches a top-level array, which PS 7 would
     # enumerate into a lone object and slip past the type check below.
     if (-not $raw.TrimStart().StartsWith('{')) { Write-Warn $invalid; return }
@@ -343,9 +343,9 @@ function Merge-ClaudeHooks ($src, $dst) {
     }
 
     if (($settings | ConvertTo-Json -Depth 20 -Compress) -eq $before) { return }
-    # LF and UTF8 without a BOM, matching init.sh; PS 5.1 emits CRLF on Windows.
+    # LF, matching init.sh; PS 5.1 emits CRLF on Windows.
     $json = ($settings | ConvertTo-Json -Depth 20) -replace "`r`n", "`n"
-    [IO.File]::WriteAllText($dst, "$json`n")
+    Write-Utf8Text $dst "$json`n"
     Write-Ok "merged working-memory hooks into $dst"
 }
 
@@ -426,7 +426,7 @@ function Write-CoexistenceSummary ($neighbors) {
 function Get-RcKey ($key, $default) {
     $file = Join-Path $TargetDir '.working-memoryrc'
     if (-not (Test-Path $file)) { return $default }
-    $line = Get-Content $file | Where-Object { $_ -match "^$key=" } | Select-Object -First 1
+    $line = (Read-Utf8Text $file) -split '\r?\n' | Where-Object { $_ -match "^$key=" } | Select-Object -First 1
     if (-not $line) { return $default }
     $val = ($line -split '=', 2)[1].Trim().Trim('"').Trim("'")
     if ($val) { return $val } else { return $default }
@@ -441,6 +441,7 @@ function Set-RcKey ($key, $value) {
     # [^\r\n]* rather than .*, which would eat a CRLF line's \r.
     $pattern = "(?m)^$([regex]::Escape($key))=[^\r\n]*"
     if ($raw -match $pattern) {
+        # Escaped so a $ in the value isn't read as a substitution token like $1.
         $raw = [regex]::Replace($raw, $pattern, $newLine.Replace('$', '$$'))
     } else {
         # An rc last edited by a tool that drops the final newline would glue the key onto its last line.
@@ -717,7 +718,7 @@ if ($Stack.Language -and (Read-Utf8Text "$WmDir/projectOverview.md") -match '(?m
 
 ## What This Is
 <!-- One sentence. What does this project do? -->
-$repoName — _add a one-sentence description here._
+$repoName $([char]0x2014) _add a one-sentence description here._
 
 ## Stack
 - Language: $($Stack.Language)
