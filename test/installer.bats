@@ -14,6 +14,8 @@ count_hook() {
   ' "$1" "$2"
 }
 
+first3() { head -c 3 "$1" | od -An -tx1 | tr -d ' \n'; }
+
 setup() { setup_repo; }
 teardown() { teardown_repo; }
 
@@ -438,4 +440,73 @@ assert [h for g in s["SessionStart"] for h in g["hooks"]] == [kit], s
   grep -q 'superseded_by' _working-memory/decisionLog.md
   grep -q 'superseded_by' _working-memory/antipatterns.md
   grep -q 'status: superseded' AGENTS.md                           # the carve-out reached the fenced section
+}
+
+# A leading BOM stays at byte 0 and the installer edits only the text after it, as init.ps1 does (#72).
+BOM_BODY='# Caf\xc3\xa9 \xe2\x89\xa4 notes\n\nuser text\n'
+BOM_MD="\xef\xbb\xbf$BOM_BODY"
+BOM_SETTINGS='\xef\xbb\xbf{"permissions":{"allow":["Bash(ls)"]}}\n'
+
+@test "CLAUDE.md BOM stays first and the user's bytes follow the fence (#72)" {
+  printf "$BOM_MD" > CLAUDE.md
+  printf "$BOM_BODY" > expected_tail
+  run_installer
+  [ "$(first3 CLAUDE.md)" = efbbbf ]
+  [ "$(tail -c +4 CLAUDE.md | head -n1)" = '<!-- working-memory:start -->' ]
+  [ "$(grep -c $'\xef\xbb\xbf' CLAUDE.md)" = 1 ]
+  python3 - <<'PY'
+d = open("CLAUDE.md", "rb").read()
+end = b"<!-- working-memory:end -->"
+tail = open("expected_tail", "rb").read()
+assert d.split(end, 1)[1] == b"\n\n" + tail, d
+PY
+}
+
+@test "CLAUDE.md without a BOM gains none (#72)" {
+  printf '# Caf\xc3\xa9 \xe2\x89\xa4 notes\n\nuser text\n' > CLAUDE.md
+  run_installer
+  [ "$(first3 CLAUDE.md)" != efbbbf ]
+  [ "$(grep -c $'\xef\xbb\xbf' CLAUDE.md || true)" = 0 ]
+}
+
+@test "BOM settings.json is merged and keeps its BOM (#72)" {
+  mkdir -p .claude
+  printf "$BOM_SETTINGS" > .claude/settings.json
+  run run_installer
+  [[ "$output" != *"not valid JSON"* ]]
+  [ "$(first3 .claude/settings.json)" = efbbbf ]
+  tail -c +4 .claude/settings.json | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+assert "SessionStart" in d["hooks"] and "SessionEnd" in d["hooks"]
+assert d["permissions"]["allow"] == ["Bash(ls)"]
+'
+}
+
+@test "BOM AGENTS.md with an existing fence keeps its single BOM (#72)" {
+  run_installer
+  { printf '\xef\xbb\xbf'; cat AGENTS.md; } > AGENTS.bom && mv AGENTS.bom AGENTS.md
+  run_installer
+  [ "$(first3 AGENTS.md)" = efbbbf ]
+  [ "$(grep -c $'\xef\xbb\xbf' AGENTS.md)" = 1 ]
+}
+
+@test "re-running over a BOM settings.json leaves it byte-identical (#72)" {
+  mkdir -p .claude
+  printf "$BOM_SETTINGS" > .claude/settings.json
+  run_installer
+  grep -q SessionStart .claude/settings.json   # without this, an unmerged file would also be "unchanged"
+  cp .claude/settings.json settings.after-first
+  run_installer
+  cmp .claude/settings.json settings.after-first
+}
+
+@test "BOM legacy unfenced section migrates in place behind one BOM (#72)" {
+  printf '\xef\xbb\xbf## Working Memory\n\nold\nTo sync working memory, run it.\n\n# Mine\n' > CLAUDE.md
+  run_installer
+  [ "$(first3 CLAUDE.md)" = efbbbf ]
+  [ "$(grep -c $'\xef\xbb\xbf' CLAUDE.md)" = 1 ]
+  [ "$(grep -c 'working-memory:start' CLAUDE.md)" = 1 ]
+  ! grep -qx 'old' CLAUDE.md
+  grep -qx '# Mine' CLAUDE.md
 }
