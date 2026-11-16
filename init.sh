@@ -187,20 +187,26 @@ add_kitnew_pointer() {
     *)                                          return 0 ;;
   esac
   local note="${open}${KITNEW_SENTINEL}. See ${base}.kitnew, merge what you want, then delete both it and this note.${close}"
+  # Check and splice the text after a leading BOM. Left in, the BOM hides a #! or --- on line 1 and ends up mid-file (#78).
+  local body="$dst" bom=0 tmpbody=""
+  if [ "$(head -c 3 "$dst" | od -An -tx1 | tr -d ' \n')" = efbbbf ]; then
+    bom=1; tmpbody="$(mktemp)"; tail -c +4 "$dst" > "$tmpbody"; body="$tmpbody"
+  fi
   local after=0 first
-  first="$(head -n1 "$dst" 2>/dev/null || true)"
+  first="$(head -n1 "$body" 2>/dev/null || true)"
   case "$first" in
     '#!'*) after=1 ;;
-    '---') after="$(awk 'NR>1 && $0=="---"{print NR; exit}' "$dst")"; [ -z "$after" ] && after=0 ;;
+    '---') after="$(awk 'NR>1 && $0=="---"{print NR; exit}' "$body")"; [ -z "$after" ] && after=0 ;;
   esac
   local tmp; tmp="$(mktemp)"
+  [ "$bom" -eq 1 ] && printf '\357\273\277' > "$tmp"
   if [ "$after" -gt 0 ]; then
-    { head -n "$after" "$dst"; printf '%s\n' "$note"; tail -n +"$((after + 1))" "$dst"; } > "$tmp"
+    { head -n "$after" "$body"; printf '%s\n' "$note"; tail -n +"$((after + 1))" "$body"; } >> "$tmp"
   else
-    { printf '%s\n' "$note"; cat "$dst"; } > "$tmp"
+    { printf '%s\n' "$note"; cat "$body"; } >> "$tmp"
   fi
   cat "$tmp" > "$dst"
-  rm -f "$tmp"
+  rm -f "$tmp" "$tmpbody"
 }
 
 # w-m-k owns one fenced section in each agent file. A (re)install only reads and

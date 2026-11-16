@@ -141,6 +141,7 @@ teardown() { teardown_repo; }
   printf '\nMy own decision.\n' >> _working-memory/decisionLog.md
   run_installer
   [ -f scripts/update-working-memory.sh.kitnew ]                       # sidecar written
+  [ "$(first3 scripts/update-working-memory.sh)" != efbbbf ]           # no BOM gained (#78)
   grep -q 'local tweak' scripts/update-working-memory.sh              # your edit kept
   grep -q 'a newer version of this file shipped' scripts/update-working-memory.sh  # pointer added
   [[ "$(head -1 scripts/update-working-memory.sh)" == '#!'* ]]         # pointer sits after the shebang
@@ -509,4 +510,53 @@ assert d["permissions"]["allow"] == ["Bash(ls)"]
   [ "$(grep -c 'working-memory:start' CLAUDE.md)" = 1 ]
   ! grep -qx 'old' CLAUDE.md
   grep -qx '# Mine' CLAUDE.md
+}
+
+# add_kitnew_pointer keeps a leading BOM first and reads the text after it (#78).
+bom_edit_script() {
+  f=scripts/update-working-memory.sh
+  run_installer
+  { printf '\xef\xbb\xbf'; cat $f; echo '# my edit'; } > t && mv t $f
+  tail -n +2 "$f" > expected_after
+}
+
+@test "a BOM'd diverged script keeps its BOM and shebang first, note on line 2 (#78)" {
+  bom_edit_script
+  run_installer
+  [ "$(first3 $f)" = efbbbf ]
+  [ "$(tail -c +4 $f | head -c 2)" = '#!' ]
+  sed -n 2p $f | grep -qF 'a newer version of this file shipped'
+  tail -n +3 $f | cmp - expected_after
+}
+
+@test "a BOM'd diverged SKILL.md keeps its BOM, note after the closing --- (#78)" {
+  run_installer
+  f=.claude/skills/update-working-memory/SKILL.md
+  { printf '\xef\xbb\xbf'; cat $f; printf '\nlocal edit\n'; } > t && mv t $f
+  close=$(tail -c +4 "$f" | awk 'NR>1 && $0=="---"{print NR; exit}')
+  run_installer
+  [ "$(first3 $f)" = efbbbf ]
+  [ "$(tail -c +4 $f | sed -n "${close}p")" = '---' ]
+  tail -c +4 $f | sed -n "$((close + 1))p" | grep -qF 'a newer version of this file shipped'
+  [[ "$(tail -c +4 $f | sed -n "$((close + 1))p")" == '<!-- '* ]]
+  [ "$(grep -c $'\xef\xbb\xbf' $f)" = 1 ]
+}
+
+@test "a second run leaves the BOM'd diverged file byte-identical (#78)" {
+  bom_edit_script
+  run_installer
+  [ "$(first3 $f)" = efbbbf ]
+  cp $f stable
+  run_installer
+  cmp $f stable
+  [ "$(grep -cF 'a newer version of this file shipped' $f)" = 1 ]
+}
+
+@test "a BOM'd .md with unclosed front matter gets the note right after the BOM (#78)" {
+  run_installer
+  f=.claude/skills/update-working-memory/SKILL.md
+  printf '\xef\xbb\xbf---\nname: x\nno close\n' > $f
+  run_installer
+  [ "$(first3 $f)" = efbbbf ]
+  tail -c +4 $f | head -n1 | grep -qF 'a newer version of this file shipped'
 }
