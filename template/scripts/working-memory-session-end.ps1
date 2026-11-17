@@ -146,12 +146,34 @@ if ((Test-Path (Join-Path $repoRoot '.ltm.yaml')) -and (Test-Path $logFile)) {
     }
 }
 
+# #4: a root manifest changed since the session base suggests a Stack review.
+# Root-only and exact-match on purpose: a nested package.json is usually a
+# fixture or sub-package, not the project's stack. Lockfiles ride along but
+# never fire alone, since a bare lockfile is mostly a routine bump. Stays quiet
+# when projectOverview.md was edited this session or has no `## Stack` heading
+# to point at. Any git failure yields no line.
+$stack = ''
+$changedNames = @(Invoke-Git -C $repoRoot diff --name-only $base)
+$stackNames = @('package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lock', 'bun.lockb', 'pyproject.toml', 'poetry.lock', 'uv.lock')
+$stackHits = @($changedNames | Where-Object { $stackNames -ccontains $_ })
+$overviewRel = '_working-memory/projectOverview.md'
+if (($stackHits -ccontains 'package.json' -or $stackHits -ccontains 'pyproject.toml') -and
+    -not ($changedNames -ccontains $overviewRel) -and
+    (Test-Path (Join-Path $repoRoot $overviewRel))) {
+    # Unreadable file throws under 'Stop'; treat as no heading.
+    $overview = ''
+    try { $overview = ((Get-Content -Raw -Encoding UTF8 (Join-Path $repoRoot $overviewRel)) + '') -replace "`r", '' } catch {}
+    if ($overview -cmatch '(?m)^## Stack[ \t]*$') {
+        $stack = "working-memory: $($stackHits -join ', ') changed this session. If the stack shifted, review the Stack section of $overviewRel."
+    }
+}
+
 $msg = $null
 if ($reason) {
     $msg = "You changed $reason this session.$extra Use the update-working-memory skill or the supplied update script to keep working memory current."
 }
-if ($promote.Count -gt 0) {
-    $msg = (@($msg) + $promote | Where-Object { $_ }) -join "`n"
+if ($stack -or $promote.Count -gt 0) {
+    $msg = (@($msg, $stack) + $promote | Where-Object { $_ }) -join "`n"
 }
 if ($msg) {
     # A quote or backslash in a pointer or title must reach the host escaped, or

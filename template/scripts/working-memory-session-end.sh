@@ -147,9 +147,36 @@ if [ -f "$REPO_ROOT/.ltm.yaml" ] && [ -f "$DL_FILE" ]; then
   done < <(tr -d '\r' < "$DL_FILE" | grep '^## ' || true)
 fi
 
+# #4: a root dependency manifest changed since BASE suggests a Stack review.
+# Root-only and exact-match on purpose: a nested package.json is usually a
+# fixture or sub-package, not the project's stack. Lockfiles ride along in the
+# list but never trigger alone; a bare lockfile is mostly a routine bump. Stays
+# quiet when projectOverview.md itself changed (already reviewed) or has no
+# `## Stack` heading (nothing to point at). Any git failure means no line.
+STACK=""
+CHANGED_PATHS=$(git -C "$REPO_ROOT" diff --name-only "$BASE" 2>/dev/null || true)
+OV_FILE="$REPO_ROOT/_working-memory/projectOverview.md"
+STACK_NAMES=""
+STACK_MANIFEST=0
+OV_CHANGED=0
+while IFS= read -r p; do
+  case "$p" in
+    package.json|pyproject.toml) STACK_MANIFEST=1; STACK_NAMES="${STACK_NAMES}${STACK_NAMES:+, }$p" ;;
+    package-lock.json|yarn.lock|pnpm-lock.yaml|bun.lock|bun.lockb|poetry.lock|uv.lock) STACK_NAMES="${STACK_NAMES}${STACK_NAMES:+, }$p" ;;
+    _working-memory/projectOverview.md) OV_CHANGED=1 ;;
+  esac
+done <<< "$CHANGED_PATHS"
+if [ "$STACK_MANIFEST" = 1 ] && [ "$OV_CHANGED" = 0 ] && [ -f "$OV_FILE" ] \
+  && tr -d '\r' 2>/dev/null < "$OV_FILE" | grep -qE '^## Stack[[:blank:]]*$'; then
+  STACK="working-memory: $STACK_NAMES changed this session. If the stack shifted, review the Stack section of _working-memory/projectOverview.md."
+fi
+
 msg=""
 if [ -n "$REASON" ]; then
   msg="You changed $REASON this session.${EXTRA} Use the update-working-memory skill or the supplied update script to keep working memory current."
+fi
+if [ -n "$STACK" ]; then
+  msg="${msg}${msg:+$'\n'}${STACK}"
 fi
 if [ -n "$PROMOTE" ]; then
   msg="${msg}${msg:+$'\n'}${PROMOTE}"

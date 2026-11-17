@@ -12,6 +12,13 @@ Describe 'session-end hook' {
     }
     AfterEach { Remove-TestRepo $repo }
 
+    # Defined once so promote tests compare against the spec text, not the script's own template.
+    BeforeAll {
+        function Get-PromoteLine ($title) {
+            "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry `"$title`""
+        }
+    }
+
     # git diff HEAD needs a HEAD, so every test commits a base first, then makes
     # the "session's work" on top of it.
 
@@ -87,12 +94,6 @@ Describe 'session-end hook' {
             Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=50`nNUDGE_LINE_THRESHOLD=5000"
             Set-Content .ltm.yaml 'bank: x'
             $start = Join-Path $KitRoot 'template/scripts/working-memory-session-start.ps1'
-        }
-        # Defined here so the tests compare against the spec text, not the script's own template.
-        BeforeAll {
-            function Get-PromoteLine ($title) {
-                "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry `"$title`""
-            }
         }
 
         It 'session-end prints an ltm promote line per new decisionLog entry when .ltm.yaml exists (#33)' {
@@ -205,6 +206,161 @@ Describe 'session-end hook' {
             $lines.Count | Should -Be 2
             $lines[0] | Should -BeExactly 'You changed 3 files and 4 lines this session. Use the update-working-memory skill or the supplied update script to keep working memory current.'
             $lines[1] | Should -BeExactly (Get-PromoteLine 'Cap retries at three per request')
+        }
+    }
+
+    # #4: a root manifest changed since session start suggests a Stack review; a lockfile alone doesn't.
+    Context 'stack freshness nudge (#4)' {
+        # Defined here so the tests compare against the spec text, not the script's own template.
+        BeforeAll {
+            function Get-StackLine ($names) {
+                "working-memory: $names changed this session. If the stack shifted, review the Stack section of _working-memory/projectOverview.md."
+            }
+        }
+
+        BeforeEach {
+            Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=50`nNUDGE_LINE_THRESHOLD=5000"
+            # Set-Content writes CRLF on Windows, which exercises the hook's CR strip.
+            Set-Content '_working-memory/projectOverview.md' "# Project Overview`n`n## Stack`n- Language: JS`n"
+            Set-Content package.json '{"name":"x"}'
+            Set-Content pnpm-lock.yaml 'lock'
+            Set-Content pyproject.toml "[project]`nname = `"x`""
+            $start = Join-Path $KitRoot 'template/scripts/working-memory-session-start.ps1'
+        }
+
+        It 'a package.json change committed this session suggests a Stack review (#4)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package.json '{"name":"y"}'
+            git commit -q -am work
+            (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage | Should -BeExactly (Get-StackLine 'package.json')
+        }
+
+        It 'an uncommitted pyproject.toml edit suggests a Stack review (#4)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Add-Content pyproject.toml 'version = "1"'
+            (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage | Should -BeExactly (Get-StackLine 'pyproject.toml')
+        }
+
+        It 'a lockfile-only change does not nudge (#4)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content pnpm-lock.yaml 'lock2'
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'several changed names are listed in git order (#4)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package-lock.json 'lock'
+            git add package-lock.json
+            Set-Content package.json '{"name":"y"}'
+            (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage | Should -BeExactly (Get-StackLine 'package-lock.json, package.json')
+        }
+
+        It 'an unrelated, nested, or look-alike file does not nudge (#4)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            New-Item -ItemType Directory -Path src, web -Force | Out-Null
+            Set-Content src/app.js 'x'
+            Set-Content web/package.json '{}'
+            Set-Content package.json.orig '{}'
+            git add -A
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'no nudge when projectOverview.md also changed this session (#4)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package.json '{"name":"y"}'
+            Add-Content '_working-memory/projectOverview.md' 'more'
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'an untracked new manifest does not nudge (#4)' {
+            git add -A; git commit -q -m base
+            git rm -q --cached pyproject.toml
+            git commit -q -m untrack
+            & $start | Out-Null
+            Set-Content pyproject.toml "[project]`nname = `"y`""
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'a manifest change committed before session start does not nudge (#4)' {
+            git add -A; git commit -q -m base
+            Set-Content package.json '{"name":"y"}'
+            git commit -q -am pre
+            & $start | Out-Null
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'no nudge without a Stack heading, and a CRLF heading still counts (#4)' {
+            Set-Content '_working-memory/projectOverview.md' "# Project Overview`n`n## Tech`n"
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package.json '{"name":"y"}'
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+            [IO.File]::WriteAllText((Join-Path (Get-Location) '_working-memory/projectOverview.md'), "# Project Overview`r`n`r`n## Stack`r`n")
+            git commit -q -am crlf
+            & $start | Out-Null
+            Set-Content package.json '{"name":"z"}'
+            (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage | Should -BeExactly (Get-StackLine 'package.json')
+        }
+
+        It 'the stack line sits between the size nudge and a promote line (#4)' {
+            Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=1`nNUDGE_LINE_THRESHOLD=1"
+            Set-Content .ltm.yaml 'bank: x'
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package.json "{`n`"name`":`"y`",`n`"version`":`"1`"`n}"
+            Set-Content '_working-memory/decisionLog.md' "## 2026-11-01: Cap retries at three per request`n"
+            $lines = @((Invoke-SessionEndHook | ConvertFrom-Json).systemMessage -split "`n")
+            $lines.Count | Should -Be 3
+            $lines[0] | Should -BeLike 'You changed *'
+            $lines[1] | Should -BeExactly (Get-StackLine 'package.json')
+            $lines[2] | Should -BeExactly (Get-PromoteLine 'Cap retries at three per request')
+        }
+
+        It 'no stack nudge during an in-progress merge (#4)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package.json '{"name":"y"}'
+            New-Item -ItemType File -Path (Join-Path (git rev-parse --absolute-git-dir) 'MERGE_HEAD') | Out-Null
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        It 'no nudge when projectOverview.md is missing (#4)' {
+            Remove-Item '_working-memory/projectOverview.md'
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package.json '{"name":"y"}'
+            "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        # A read failure must stay silent: stderr leaking would reach the user's terminal.
+        It 'an unreadable projectOverview.md stays silent (#4)' -Skip:($env:OS -eq 'Windows_NT' -or (id -u) -eq '0') {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package.json '{"name":"y"}'
+            $ov = Join-Path (Get-Location) '_working-memory/projectOverview.md'
+            # chmod 000 alone makes git list the overview as changed, which would suppress the line before the read.
+            git update-index --assume-unchanged _working-memory/projectOverview.md
+            & chmod 000 $ov
+            try {
+                $all = & (Join-Path $KitRoot 'template/scripts/working-memory-session-end.ps1') *>&1 | Out-String
+                $code = $LASTEXITCODE
+            } finally { & chmod 600 $ov }
+            "$all".Trim() | Should -BeNullOrEmpty
+            $code | Should -BeIn @($null, 0)
+        }
+
+        It 'a manifest changed with a lockfile fires and lists both (#4)' {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package.json '{"name":"y"}'
+            Set-Content pnpm-lock.yaml 'lock2'
+            (Invoke-SessionEndHook | ConvertFrom-Json).systemMessage | Should -BeExactly (Get-StackLine 'package.json, pnpm-lock.yaml')
         }
     }
 
