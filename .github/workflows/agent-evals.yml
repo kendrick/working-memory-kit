@@ -8,9 +8,11 @@ on:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
-# A push mid-run cancels the old run so one PR doesn't pay twice.
+# A push mid-run cancels the old run so one PR doesn't pay twice. The label
+# name is in the key so an unrelated label can't cancel a run and replace it
+# with a skipped check.
 concurrency:
-  group: agent-evals-${{ github.event.pull_request.number || github.ref }}
+  group: agent-evals-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name || 'code' }}
   cancel-in-progress: true
 
 jobs:
