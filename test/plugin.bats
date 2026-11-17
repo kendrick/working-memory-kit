@@ -7,7 +7,6 @@ load helpers
 
 SKILL="$KIT_ROOT/skills/init/SKILL.md"
 
-# Body of the one fenced block opened by ```<lang>.
 skill_block() {
   awk -v open="\`\`\`$1" '$0 == open { f = 1; next } f && /^```$/ { exit } f' "$SKILL"
 }
@@ -101,6 +100,7 @@ PY
   for f in --coexist-with --coexist-principles --no-coexist --overwrite-machinery --formatter-override --no-formatter-override; do
     grep -qF -- "$f" "$SKILL" || { echo "missing $f"; false; }
   done
+  grep -qF -- "--coexist-with='specs'" "$SKILL"  # the = form is accepted by both installers; refusing it was a review finding
   [ "$(grep -c '^```bash$' "$SKILL")" -eq 1 ]
   [ "$(grep -c '^```powershell$' "$SKILL")" -eq 1 ]
   block="$(skill_block bash)"
@@ -128,6 +128,20 @@ PY
   [ -z "$output" ]
   [ "$(snapshot "$root")" = "$before" ]
   [ -z "$(ls -A "$elsewhere")" ]
+}
+
+@test "init skill passes the = form of a value flag through (#82)" {
+  setup_parity
+  mkdir -p "$a/my specs" "$b/my specs"
+  cd "$elsewhere"
+  run bash -c "$cmd --no-formatter-override --coexist-with='my specs'"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  cd "$b"
+  run bash "$KIT_ROOT/init.sh" --no-formatter-override --coexist-with="my specs" </dev/null
+  [ "$status" -eq 0 ]
+  run diff -r -x .git "$a" "$b"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  grep -rq 'my specs' "$a" --exclude-dir=.git  # proves the value reached the installer, not just that both runs agree
 }
 
 @test "init skill passes flags through (#82)" {

@@ -7,7 +7,7 @@ BeforeDiscovery { $script:HasWinPs = [bool](Get-Command powershell.exe -ErrorAct
 BeforeAll {
     . (Join-Path $PSScriptRoot 'Common.ps1')
 
-    # relpath|mtime ticks|size for everything under $root; .git excluded since it's not plugin content.
+    # relpath|mtime ticks|size for everything under $root.
     function Get-Snapshot ($root) {
         $n = $root.TrimEnd('\', '/').Length + 1
         return @(Get-ChildItem -LiteralPath $root -Recurse -Force |
@@ -15,7 +15,6 @@ BeforeAll {
             Sort-Object)
     }
 
-    # relpath|SHA256 for every file under $root but .git.
     function Get-TreeHashes ($root) {
         $n = $root.TrimEnd('\', '/').Length + 1
         return @(Get-ChildItem -LiteralPath $root -Recurse -Force -File |
