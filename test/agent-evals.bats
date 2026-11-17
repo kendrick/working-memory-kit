@@ -122,3 +122,26 @@ PY
     if grep -qE "$re" <<<"$p"; then echo "gated but shouldn't be: $p"; false; fi
   done
 }
+
+@test "first-call grader matches only the first tool call's input (#81)" {
+  # A batched message puts several tool_use objects on one trace line, so the
+  # pattern must stop at the first call's input or a second call can pass it.
+  run python3 - "$KIT_ROOT/evals/on-demand-conventions/graders/first-call-targets-conventions.md" <<'PY'
+import json, re, sys
+src = open(sys.argv[1]).read()
+pat = re.search(r"^pattern: '(.*)'$", src, re.M).group(1).replace("''", "'")
+def call(i, name, inp): return {"type": "tool_use", "id": f"t{i}", "name": name, "input": inp}
+def line(*calls): return json.dumps({"type": "assistant", "message": {"content": list(calls)}}, separators=(",", ":"))
+conv = {"file_path": "/w/_working-memory/conventions.md"}
+cases = [
+    (line(call(1, "Read", conv)), True),
+    (line(call(1, "Glob", {"pattern": "**/{AGENTS.md,conventions.md}"})), True),
+    (line(call(1, "Read", {"file_path": "/w/AGENTS.md"}), call(2, "Read", conv)), False),
+    (line(call(1, "Grep", {"pattern": "route"})) + "\n" + line(call(2, "Read", conv)), False),
+]
+bad = [t for t, want in cases if bool(re.search(pat, t)) != want]
+print("\n".join(bad))
+sys.exit(1 if bad else 0)
+PY
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+}
