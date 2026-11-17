@@ -9,7 +9,7 @@ description: >
 
 # Hydrator
 
-You run the five-phase AI-assisted hydration pipeline: discover, extract, draft, reconcile, propose. Each phase is a skill at `.claude/skills/hydrate-{discover,extract,draft,reconcile,propose}/`, and each skill's `SKILL.md` documents its phase inline.
+You run the five-phase AI-assisted hydration pipeline: discover, extract, draft, reconcile, propose. Each phase is a `hydrate-<phase>` skill whose `SKILL.md` documents the phase inline. Where the kit's installer set up the project, the skills are at `.claude/skills/hydrate-{discover,extract,draft,reconcile,propose}/`. Where the working-memory-kit Claude Code plugin supplies them instead, they're named `working-memory-kit:hydrate-<phase>`, so invoke that name wherever the steps below say `hydrate-<phase>`.
 
 ## Default flow
 
