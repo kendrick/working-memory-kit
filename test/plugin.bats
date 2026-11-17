@@ -113,6 +113,12 @@ PY
   for q in "\`'\`" "‘" "’" "‚" "‛"; do
     [[ "$refusal" == *"$q"* ]] || { echo "refusal misses $q"; false; }
   done
+  # Each rule sits on its own line, so the PowerShell `''` can't be satisfied by the tail of `'\''`.
+  grep -E '^- bash ' "$SKILL" | grep -qF "\`'\\''\`"
+  ps="$(grep -E '^- PowerShell ' "$SKILL")"
+  for q in "\`''\`" "‘" "’" "‚" "‛"; do
+    [[ "$ps" == *"$q"* ]] || { echo "PowerShell rule misses $q"; false; }
+  done
 }
 
 @test "init skill's bash command installs like init.sh (#82)" {
@@ -162,6 +168,30 @@ PY
   [ -z "$output" ]
   grep -q coexistence_asked "$a/.working-memoryrc"
   [ "$(snapshot "$root")" = "$before" ]
+}
+
+# The agent writes flag values itself, so an apostrophe in one must be escaped, not refused.
+@test "init skill escapes an apostrophe in a flag value (#82)" {
+  setup_parity
+  # The worked example in SKILL.md is the command fragment the agent is told to write.
+  arg="$(grep -o -- "--coexist-with='team'\\\\''s specs'" "$SKILL" | head -1)"
+  [ -n "$arg" ] || { echo "no bash example for an apostrophe in SKILL.md"; false; }
+  c="$BATS_TEST_TMPDIR/c/my app"
+  new_repo "$c"
+  mkdir -p "$a/team's specs" "$b/team's specs" "$c/team's specs"
+  cd "$elsewhere"
+  run bash -c "$cmd --no-formatter-override $arg"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  run bash -c "${cmd//"$a"/$c} --no-formatter-override ${arg/=/ }"  # the space form of the same value
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  cd "$b"
+  run bash "$KIT_ROOT/init.sh" --no-formatter-override --coexist-with "team's specs" </dev/null
+  [ "$status" -eq 0 ]
+  run diff -r -x .git "$a" "$b"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  run diff -r -x .git "$c" "$b"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  grep -qF "team's specs" "$a/.working-memoryrc"
 }
 
 # A $ or backtick in a substituted path must stay literal, or the kit can install into a sibling dir.

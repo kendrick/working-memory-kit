@@ -27,7 +27,12 @@ Keep both paths exactly as written. Each command moves into the project director
 
 The user's arguments are: `$ARGUMENTS`
 
-Append each argument the user typed to the end of the command, in the order they typed it. Wrap each value (the `<path>` or `<file>` after a flag) in single quotes. The two value flags also take the `=` form (`--coexist-with=<path>`, `--coexist-principles=<file>`); keep that as one argument and quote the value after the `=`, as in `--coexist-with='specs'`. These are the installer's flags:
+Append each argument the user typed to the end of the command, in the order they typed it. Wrap each value (the `<path>` or `<file>` after a flag) in single quotes. The two value flags also take the `=` form (`--coexist-with=<path>`, `--coexist-principles=<file>`); keep that as one argument and quote the value after the `=`, as in `--coexist-with='specs'`. Quote a `'` inside a value by shell:
+
+- bash writes it as `'\''`, as in `--coexist-with='team'\''s specs'`.
+- PowerShell writes it as `''`, as in `--coexist-with='team''s specs'`. It does the same for each of `‘`, `’`, `‚`, `‛`, which PowerShell also reads as single quotes. bash leaves those four alone.
+
+These are the installer's flags:
 
 - `--coexist-with <path>`: register a spec-tooling folder the installer can't detect on its own.
 - `--coexist-principles <file>`: the principles file that goes with `--coexist-with`.
