@@ -105,7 +105,8 @@ PY
   live="$(sed -E -e '/^[[:space:]]*#/d' -e 's/[[:space:]]+#.*$//' "$f")"
   for s in '--max-cost-usd 3' '--ablation none' '--threshold 0.66' '--no-publish' \
            '--model claude-sonnet-5-5' 'secrets.ANTHROPIC_API_KEY' \
-           "needs.changes.outputs.run == 'true'" "github.event.label.name == 'agent-evals'"; do
+           "needs.changes.outputs.run == 'true'" "github.event.label.name == 'agent-evals'" \
+           "github.event.label.name != 'agent-evals' && github.run_id || 'eval'"; do
     [[ "$live" == *"$s"* ]] || { echo "missing: $s"; false; }
   done
   # A paths filter also applies to `labeled` events, so it would stop the label from forcing a run.

@@ -12,11 +12,11 @@ on:
 permissions:
   contents: read
 
-# A push mid-run cancels the old run so one PR doesn't pay twice. The label
-# name is in the key so an unrelated label can't cancel a run and replace it
-# with a skipped check.
+# Pushes and the agent-evals label share one group per PR, so a new run cancels
+# the old one and the PR never pays twice. Any other label gets a group of its
+# own, so it can't cancel a paid run and leave a skipped check in its place.
 concurrency:
-  group: agent-evals-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name || 'code' }}
+  group: agent-evals-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name != 'agent-evals' && github.run_id || 'eval' }}
   cancel-in-progress: true
 
 jobs:
