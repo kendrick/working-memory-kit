@@ -206,7 +206,7 @@ add_kitnew_pointer() {
     { printf '%s\n' "$note"; cat "$body"; } >> "$tmp"
   fi
   cat "$tmp" > "$dst"
-  rm -f "$tmp" "$tmpbody"
+  rm -f "$tmp" ${tmpbody:+"$tmpbody"}
 }
 
 # w-m-k owns one fenced section in each agent file. A (re)install only reads and
