@@ -319,3 +319,5 @@ Issues and pull requests are welcome, through the [issue templates](.github/ISSU
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+<!-- falsifier probe for #85; never merged -->
