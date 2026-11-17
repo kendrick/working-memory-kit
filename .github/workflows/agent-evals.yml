@@ -8,6 +8,10 @@ on:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
+# Neither job writes to the repo, and the eval job holds the API key, so keep the token read-only.
+permissions:
+  contents: read
+
 # A push mid-run cancels the old run so one PR doesn't pay twice. The label
 # name is in the key so an unrelated label can't cancel a run and replace it
 # with a skipped check.
