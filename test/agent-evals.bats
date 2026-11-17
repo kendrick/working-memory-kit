@@ -80,7 +80,9 @@ PY
     case "$c" in _shared|results) continue ;; esac  # results/ is gitignored eval output
     [ -f "$d/prompt.md" ]
     [ -f "$d/scaffold.sh" ]
-    grep -qF 'scaffold_script: scaffold.sh' "$d/case.yaml"
+    # A top-level scaffold_script is silently ignored, so the case runs in an empty workspace.
+    grep -qx 'context:' "$d/case.yaml"
+    grep -qxF '  scaffold_script: scaffold.sh' "$d/case.yaml"
     grep -q '^schema_version:' "$d/case.yaml"
     grep -qxF "name: $c" "$d/case.yaml"
     [ -n "$(ls "$d"/graders/*.md)" ]

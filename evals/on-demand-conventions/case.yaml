@@ -1,3 +1,5 @@
 schema_version: "1.0"
 name: on-demand-conventions
-scaffold_script: scaffold.sh
+# Under context: or the runner ignores it and runs the case in an empty workspace.
+context:
+  scaffold_script: scaffold.sh
