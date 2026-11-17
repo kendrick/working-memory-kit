@@ -66,6 +66,18 @@ _working-memory/
 
 ## Install
 
+In Claude Code, add the marketplace and install the plugin, then run its `init` skill in your project:
+
+```
+/plugin marketplace add kendrick/agent-plugins
+/plugin install working-memory-kit@kendrick
+/working-memory-kit:init
+```
+
+The skill takes the installer's flags as arguments, such as `/working-memory-kit:init --no-coexist`. It runs the same `init.sh` (or `init.ps1` on Windows) from the plugin's copy of the kit, so the result matches the command-line route below. The plugin adds only the `init` skill. The hydration skills and the hydrator agent arrive in your project's `.claude/` from the installer, as they do on the other route.
+
+Or install from a shell:
+
 ```bash
 # macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/kendrick/working-memory-kit/main/init.sh | bash
@@ -261,7 +273,13 @@ working-memory-kit/
 ├── ROADMAP.md               # Horizons, not dates; GitHub issues are the source of truth
 ├── guide/                   # Practitioner-facing guides
 │   └── ai-assisted-hydration.md  # Five-phase pipeline for deeper content extraction
+├── .claude-plugin/
+│   └── plugin.json          # Manifest for the shipped Claude Code plugin
+├── skills/
+│   └── init/SKILL.md        # /working-memory-kit:init, which runs the installer
+├── evals/                   # claude plugin eval cases (see test/README.md)
 ├── .claude/
+│   ├── .claude-plugin/plugin.json  # Eval-only manifest, never shipped
 │   ├── agents/hydrator.md   # Composite agent orchestrating the 5 hydration skills
 │   └── skills/              # Hydration reference skills (read natively by both tools)
 │       └── hydrate-{discover,extract,draft,reconcile,propose}/
