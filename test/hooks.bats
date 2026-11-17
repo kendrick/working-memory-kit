@@ -406,3 +406,157 @@ roundtrip_entry() {
   [ "$(printf '%s\n' "$msg" | sed -n 1p)" = "You changed 2 files and 2 lines this session. Use the update-working-memory skill or the supplied update script to keep working memory current." ]
   [ "$(printf '%s\n' "$msg" | sed -n 2p)" = "$(promote_line 'Cap retries at three per request')" ]
 }
+
+# #4: a root manifest changed since session start suggests a Stack review; a lockfile alone doesn't.
+# Expected text comes from the issue's spec, not from the hook.
+stack_setup() {
+  printf 'NUDGE_FILE_THRESHOLD=50\nNUDGE_LINE_THRESHOLD=5000\n' > .working-memoryrc
+  printf '# Project Overview\n\n## Stack\n- Language: JS\n' > _working-memory/projectOverview.md
+  printf '{"name":"x"}\n' > package.json
+  printf 'lock\n' > pnpm-lock.yaml
+  printf '[project]\nname = "x"\n' > pyproject.toml
+}
+
+stack_line() {
+  printf 'working-memory: %s changed this session. If the stack shifted, review the Stack section of _working-memory/projectOverview.md.' "$1"
+}
+
+@test "a package.json change committed this session suggests a Stack review (#4)" {
+  stack_setup; commit_base; bash "$START" </dev/null
+  printf '{"name":"y"}\n' > package.json
+  git commit -qam work
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "$(stack_line package.json)" ]
+}
+
+@test "an uncommitted pyproject.toml edit suggests a Stack review (#4)" {
+  stack_setup; commit_base; bash "$START" </dev/null
+  printf 'extra = 1\n' >> pyproject.toml
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "$(stack_line pyproject.toml)" ]
+}
+
+@test "a lockfile-only change does not nudge (#4)" {
+  stack_setup; commit_base; bash "$START" </dev/null
+  printf 'lock2\n' > pnpm-lock.yaml
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "several changed names are listed in git order (#4)" {
+  stack_setup; commit_base; bash "$START" </dev/null
+  printf '{}\n' > package-lock.json
+  git add package-lock.json
+  printf '{"name":"y"}\n' > package.json
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "$(stack_line 'package-lock.json, package.json')" ]
+}
+
+@test "an unrelated, nested, or look-alike file does not nudge (#4)" {
+  stack_setup; commit_base; bash "$START" </dev/null
+  mkdir -p src web
+  printf 'x\n' > src/app.js
+  printf '{}\n' > web/package.json
+  printf '{}\n' > package.json.orig
+  git add -A
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "no nudge when projectOverview.md also changed this session (#4)" {
+  stack_setup; commit_base; bash "$START" </dev/null
+  printf '{"name":"y"}\n' > package.json
+  printf -- '- Framework: none\n' >> _working-memory/projectOverview.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "an untracked new manifest does not nudge (#4)" {
+  stack_setup
+  git add -A
+  git rm -q --cached pyproject.toml
+  git commit -q -m base
+  bash "$START" </dev/null
+  printf '[project]\nname = "y"\n' > pyproject.toml
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a manifest change committed before session start does not nudge (#4)" {
+  stack_setup; commit_base
+  printf '{"name":"y"}\n' > package.json
+  git commit -qam pre
+  bash "$START" </dev/null
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "no nudge without a Stack heading, and a CRLF heading still counts (#4)" {
+  stack_setup
+  printf '# Project Overview\n\n## Tech\n' > _working-memory/projectOverview.md
+  commit_base; bash "$START" </dev/null
+  printf '{"name":"y"}\n' > package.json
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  printf '# Project Overview\r\n\r\n## Stack\r\n' > _working-memory/projectOverview.md
+  git commit -qam crlf
+  bash "$START" </dev/null
+  printf '{"name":"z"}\n' > package.json
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "$(stack_line package.json)" ]
+}
+
+@test "the stack line sits between the size nudge and a promote line (#4)" {
+  stack_setup
+  printf 'NUDGE_FILE_THRESHOLD=1\nNUDGE_LINE_THRESHOLD=1\n' > .working-memoryrc
+  printf 'bank: x\n' > .ltm.yaml
+  commit_base; bash "$START" </dev/null
+  printf '{"name":"y"}\n' > package.json
+  printf '## 2026-11-01: Cap retries at three per request\n' > _working-memory/decisionLog.md
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  msg="$(sysmsg)"
+  [ "$(printf '%s\n' "$msg" | wc -l | tr -d ' ')" = 3 ]
+  [[ "$(printf '%s\n' "$msg" | sed -n 1p)" == "You changed "* ]]
+  [ "$(printf '%s\n' "$msg" | sed -n 2p)" = "$(stack_line package.json)" ]
+  [ "$(printf '%s\n' "$msg" | sed -n 3p)" = "$(promote_line 'Cap retries at three per request')" ]
+}
+
+@test "no stack nudge during an in-progress merge (#4)" {
+  stack_setup; commit_base; bash "$START" </dev/null
+  printf '{"name":"y"}\n' > package.json
+  : > "$(git rev-parse --absolute-git-dir)/MERGE_HEAD"
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "no nudge when projectOverview.md is missing (#4)" {
+  stack_setup
+  rm _working-memory/projectOverview.md
+  commit_base; bash "$START" </dev/null
+  printf '{"name":"y"}\n' > package.json
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a manifest changed with a lockfile fires and lists both (#4)" {
+  stack_setup; commit_base; bash "$START" </dev/null
+  printf '{"name":"y"}\n' > package.json
+  printf 'lock2\n' > pnpm-lock.yaml
+  run bash "$HOOK"
+  [ "$status" -eq 0 ]
+  [ "$(sysmsg)" = "$(stack_line 'package.json, pnpm-lock.yaml')" ]
+}

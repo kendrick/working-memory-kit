@@ -146,7 +146,7 @@ The other six files load on demand. `AGENTS.md` or `.github/copilot-instructions
 - Project-wide patterns via `conventions.md`
 - Rejected approaches via `antipatterns.md`
 
-After meaningful work, you (or the synchronizer agent) move completed items out of `activeContext.md` and into `decisionLog.md`. The session-end hook nudges you when the diff suggests an update is overdue, by default when you've changed 5+ files **or** 200+ lines. Claude Code users don't see this nudge, because Claude Code throws away SessionEnd hook output.
+After meaningful work, you (or the synchronizer agent) move completed items out of `activeContext.md` and into `decisionLog.md`. The session-end hook nudges you when the diff suggests an update is overdue, by default when you've changed 5+ files **or** 200+ lines. It also suggests reviewing the Stack section of `projectOverview.md` when `package.json` or `pyproject.toml` at the repo root changed this session (a lockfile alone doesn't count), and stays quiet if you already edited `projectOverview.md`. Claude Code users don't see this nudge, because Claude Code throws away SessionEnd hook output.
 
 Manual sync: use `/update-working-memory` in Claude Code or GitHub Copilot Chat, `$update-working-memory` in Codex, or the `working-memory-synchronizer` agent where your tool supports it. From any terminal, `./scripts/update-working-memory.sh` prints the active config and current state.
 
