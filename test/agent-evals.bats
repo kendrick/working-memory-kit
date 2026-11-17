@@ -89,3 +89,28 @@ PY
   grep -qF 'weight: 2' "$d/first-call-targets-conventions.md"
   grep -qF 'target: trace' "$d/first-call-targets-conventions.md"
 }
+
+@test "agent-evals workflow gates on label or paths (#81)" {
+  f="$KIT_ROOT/.github/workflows/agent-evals.yml"
+  [ -f "$f" ]
+  # Comments stripped, so a flag that's only mentioned in a comment doesn't count.
+  live="$(sed -E -e '/^[[:space:]]*#/d' -e 's/[[:space:]]+#.*$//' "$f")"
+  for s in '--max-cost-usd 3' '--ablation none' '--threshold 0.66' '--no-publish' \
+           '--model claude-sonnet-5-5' 'secrets.ANTHROPIC_API_KEY' \
+           "needs.changes.outputs.run == 'true'" "github.event.label.name == 'agent-evals'"; do
+    [[ "$live" == *"$s"* ]] || { echo "missing: $s"; false; }
+  done
+  # A paths filter also applies to `labeled` events, so it would stop the label from forcing a run.
+  if grep -Eq '^[[:space:]]+paths(-ignore)?:' <<<"$live"; then echo "has a paths filter"; false; fi
+  # Run the workflow's own path regex over sample paths rather than grepping its text.
+  re="$(grep -F 'grep -qE' <<<"$live" | sed -E "s/.*grep -qE '([^']*)'.*/\1/")"
+  [ -n "$re" ]
+  for p in template/AGENTS.md init.sh template/scripts/working-memory-session-start.sh \
+           .claude/skills/hydrate-discover/SKILL.md .claude/agents/hydrator.md \
+           .claude-plugin/plugin.json evals/hydrate-trigger/prompt.md; do
+    grep -qE "$re" <<<"$p" || { echo "not gated: $p"; false; }
+  done
+  for p in README.md test/agent-evals.bats init.ps1 template/AGENTS.md.bak; do
+    if grep -qE "$re" <<<"$p"; then echo "gated but shouldn't be: $p"; false; fi
+  done
+}

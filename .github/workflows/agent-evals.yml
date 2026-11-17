@@ -1,0 +1,75 @@
+name: agent-evals
+
+# Its own file, so its path check can't touch the free `test` jobs.
+on:
+  # No `paths:` filter here: GitHub applies it to `labeled` events too, so the
+  # label couldn't force a run. The `changes` job does the path check instead.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+# A push mid-run cancels the old run so one PR doesn't pay twice.
+concurrency:
+  group: agent-evals-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Event data reaches the script only through env, never `${{ }}` in the
+      # script body, so a crafted label or ref can't inject shell.
+      - id: gate
+        name: Decide whether to run evals
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          # Adding any other label leaves run=false, so relabeling never re-bills.
+          ADDED_EVALS_LABEL: ${{ github.event.label.name == 'agent-evals' }}
+          HAS_EVALS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'agent-evals') }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          run=false
+          if [ "$EVENT" = workflow_dispatch ]; then
+            run=true
+          elif [ "$ACTION" = labeled ]; then
+            run="$ADDED_EVALS_LABEL"
+          elif [ "$HAS_EVALS_LABEL" = true ]; then
+            run=true
+          else
+            # Separate from the grep so a failed diff fails the step instead of reading as "no match".
+            files="$(git diff --name-only "$BASE...$HEAD")"
+            if grep -qE '^(template/AGENTS\.md$|init\.sh$|template/scripts/working-memory-session-start\.sh$|\.claude/skills/|\.claude/agents/|\.claude-plugin/|evals/)' <<<"$files"; then
+              run=true
+            fi
+          fi
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
+
+  agent-evals:
+    name: agent-evals
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # 2.1.319 is the version spike #32 ran the cases on.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.319
+      # The model pin is what spike #32's `--model sonnet` resolved to, so a model
+      # rollover can't move the scores silently.
+      - name: Run evals
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: claude plugin eval . --scaffold --trust-plugin --no-publish --ablation none --model claude-sonnet-5-5 --threshold 0.66 --max-cost-usd 3 --json results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-evals-results
+          path: results.json
