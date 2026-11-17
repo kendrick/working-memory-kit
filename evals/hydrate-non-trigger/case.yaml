@@ -1,0 +1,5 @@
+schema_version: "1.0"
+name: hydrate-non-trigger
+# Under context: or the runner ignores it and runs the case in an empty workspace.
+context:
+  scaffold_script: scaffold.sh

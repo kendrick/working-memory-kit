@@ -1,0 +1,20 @@
+{
+  "name": "working-memory-kit",
+  "version": "0.3.0",
+  "description": "Exists for `claude plugin eval` runs against the kit; not listed in a marketplace.",
+  "skills": ["./.claude/skills/"],
+  "agents": ["./.claude/agents/hydrator.md"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh\" ] && bash \"$CLAUDE_PROJECT_DIR/scripts/working-memory-session-start.sh\" --claude || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

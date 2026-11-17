@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Run shellcheck
-        run: shellcheck init.sh template/scripts/*.sh
+        run: shellcheck init.sh template/scripts/*.sh evals/_shared/install-kit.sh evals/*/scaffold.sh
 
   # init.ps1 and the .ps1 hooks are parity-written against the bash side; Pester
   # is the only thing that exercises that PowerShell behaviorally (the bats suite

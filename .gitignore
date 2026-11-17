@@ -1,2 +1,4 @@
 # Per-machine Claude Code settings belong in .claude/settings.local.json.
 /.claude/settings.json
+# Eval run output: can be large and carries per-run traces.
+/evals/results/
