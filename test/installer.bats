@@ -560,3 +560,58 @@ bom_edit_script() {
   [ "$(first3 "$f")" = efbbbf ]
   tail -c +4 "$f" | head -n1 | grep -qF 'a newer version of this file shipped'
 }
+
+# add_kitnew_pointer puts the note on its own line even when the shebang or closing --- is the file's last line with no newline (#84).
+KITNEW_SH_NOTE='# working-memory-kit: a newer version of this file shipped. See update-working-memory.sh.kitnew, merge what you want, then delete both it and this note.'
+
+@test "pointer goes on its own line after a shebang with no trailing newline (#84)" {
+  run_installer
+  f=scripts/update-working-memory.sh
+  printf '#!/bin/sh' > "$f"
+  run_installer
+  printf '#!/bin/sh\n%s\n' "$KITNEW_SH_NOTE" > expected
+  cmp "$f" expected
+  [ "$(sed -n 1p "$f")" = '#!/bin/sh' ]
+}
+
+@test "a shebang that ends in a newline gains no blank line (#84)" {
+  run_installer
+  f=scripts/update-working-memory.sh
+  printf '#!/bin/sh\n' > "$f"
+  run_installer
+  printf '#!/bin/sh\n%s\n' "$KITNEW_SH_NOTE" > expected
+  cmp "$f" expected
+}
+
+@test "a BOM'd shebang with no trailing newline keeps its BOM, note on line 2 (#84)" {
+  run_installer
+  f=scripts/update-working-memory.sh
+  printf '\xef\xbb\xbf#!/bin/sh' > "$f"
+  run_installer
+  printf '\xef\xbb\xbf#!/bin/sh\n%s\n' "$KITNEW_SH_NOTE" > expected
+  cmp "$f" expected
+  [ "$(first3 "$f")" = efbbbf ]
+  [ "$(grep -c $'\xef\xbb\xbf' "$f")" = 1 ]
+}
+
+@test "pointer goes on its own line after a closing --- with no trailing newline (#84)" {
+  run_installer
+  f=.claude/skills/update-working-memory/SKILL.md
+  printf -- '---\nname: x\n---' > "$f"
+  run_installer
+  [ "$(sed -n 3p "$f")" = '---' ]
+  sed -n 4p "$f" | grep -q '^<!-- '
+  sed -n 4p "$f" | grep -qF 'a newer version of this file shipped'
+  [ "$(wc -l < "$f" | tr -d ' ')" = 4 ]
+}
+
+@test "a second run leaves the repaired file byte-identical (#84)" {
+  run_installer
+  f=scripts/update-working-memory.sh
+  printf '#!/bin/sh' > "$f"
+  run_installer
+  cp "$f" stable
+  run_installer
+  cmp "$f" stable
+  [ "$(grep -cF 'a newer version of this file shipped' "$f")" = 1 ]
+}

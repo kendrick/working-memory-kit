@@ -201,7 +201,8 @@ add_kitnew_pointer() {
   local tmp; tmp="$(mktemp)"
   [ "$bom" -eq 1 ] && printf '\357\273\277' > "$tmp"
   if [ "$after" -gt 0 ]; then
-    { head -n "$after" "$body"; printf '%s\n' "$note"; tail -n +"$((after + 1))" "$body"; } >> "$tmp"
+    # head -n passes through only the newlines the file has, so an unterminated last line would swallow the note (#84).
+    { head -n "$after" "$body"; [ -n "$(head -n "$after" "$body" | tail -c 1)" ] && echo; printf '%s\n' "$note"; tail -n +"$((after + 1))" "$body"; } >> "$tmp"
   else
     { printf '%s\n' "$note"; cat "$body"; } >> "$tmp"
   fi
