@@ -1,1 +1,3 @@
+schema_version: "1.0"
+name: hydrate-trigger
 scaffold_script: scaffold.sh

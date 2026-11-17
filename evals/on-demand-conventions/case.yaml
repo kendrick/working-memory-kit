@@ -1,1 +1,3 @@
+schema_version: "1.0"
+name: on-demand-conventions
 scaffold_script: scaffold.sh
