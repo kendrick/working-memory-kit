@@ -4,7 +4,10 @@
 
 load helpers
 
-# Read the hook command from the manifest so tests 2 and 3 can't drift from it.
+setup() { setup_repo; }
+teardown() { teardown_repo; }
+
+# Read the hook command from the manifest so the "hook is silent" and "hook runs" tests can't drift from it.
 hook_cmd() {
   python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["hooks"]["SessionStart"][0]["hooks"][0]["command"])' "$KIT_ROOT/.claude-plugin/plugin.json"
 }
@@ -27,18 +30,18 @@ PY
 }
 
 @test "hook is silent without the script (#81)" {
-  dir="$(mktemp -d)"
-  CLAUDE_PROJECT_DIR="$dir" run bash -c "$(hook_cmd)"
-  rm -rf "$dir"
+  cmd="$(hook_cmd)"
+  [ -n "$cmd" ]  # an empty command would be silent for the wrong reason
+  CLAUDE_PROJECT_DIR="$TESTDIR" run bash -c "$cmd"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
 @test "hook runs the installed script (#81)" {
-  setup_repo
   run_installer >/dev/null
-  CLAUDE_PROJECT_DIR="$TESTDIR" run bash -c "$(hook_cmd)"
-  teardown_repo
+  cmd="$(hook_cmd)"
+  [ -n "$cmd" ]
+  CLAUDE_PROJECT_DIR="$TESTDIR" run bash -c "$cmd"
   [ "$status" -eq 0 ]
   [[ "$output" == *additionalContext* ]] || false
   [[ "$output" == *"On-demand reads, from AGENTS.md"* ]] || false
@@ -48,8 +51,8 @@ PY
   f="$KIT_ROOT/.claude/agents/hydrator.md"
   grep -qF '.claude/skills/hydrate-{discover,extract,draft,reconcile,propose}/' "$f"
   grep -qF 'working-memory-kit:hydrate-<phase>' "$f"
-  ! grep -qF 'Each phase is a skill at' "$f"
-  ! awk '/^---$/{n++; next} n==1' "$f" | grep -q '^skills:'
+  if grep -qF 'Each phase is a skill at' "$f"; then false; fi
+  if awk '/^---$/{n++; next} n==1' "$f" | grep -q '^skills:'; then false; fi
 }
 
 @test ".gitignore ignores eval results (#81)" {
@@ -57,26 +60,29 @@ PY
 }
 
 @test "install-kit builds the eval workspace (#81)" {
-  dir="$(mktemp -d)"
-  cd "$dir"
   GIT_CONFIG_GLOBAL=/dev/null run bash "$KIT_ROOT/evals/hydrate-trigger/scaffold.sh"
-  [ "$status" -eq 0 ] || { echo "$output"; rm -rf "$dir"; false; }
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
   [ -d .git ]
   grep -qF '/api/v2/user-profiles' src/server.js
   [ -f scripts/working-memory-session-start.sh ]
   grep -qF '`conventions.md`' AGENTS.md
   naming="$(awk '/^## Naming/{f=1;next} /^## /{f=0} f' _working-memory/conventions.md)"
-  rm -rf "$dir"
   [[ "$naming" == *kebab-case* ]] || false
   [[ "$naming" != *"_Not yet defined._"* ]] || false
 }
 
 @test "every case is complete (#81)" {
   for c in on-demand-conventions hydrate-trigger hydrate-non-trigger; do
-    d="$KIT_ROOT/evals/$c"
+    [ -d "$KIT_ROOT/evals/$c" ]
+  done
+  for d in "$KIT_ROOT"/evals/*/; do
+    d="${d%/}"; c="$(basename "$d")"
+    case "$c" in _shared|results) continue ;; esac  # results/ is gitignored eval output
     [ -f "$d/prompt.md" ]
     [ -f "$d/scaffold.sh" ]
     grep -qF 'scaffold_script: scaffold.sh' "$d/case.yaml"
+    grep -q '^schema_version:' "$d/case.yaml"
+    grep -qxF "name: $c" "$d/case.yaml"
     [ -n "$(ls "$d"/graders/*.md)" ]
   done
   [ ! -e "$KIT_ROOT/evals/_shared/case.yaml" ]
@@ -85,7 +91,7 @@ PY
 
 @test "on-demand case drops the Read grader (#81)" {
   d="$KIT_ROOT/evals/on-demand-conventions/graders"
-  ! grep -rqF 'type: tool_used' "$d"
+  if grep -rqF 'type: tool_used' "$d"; then false; fi
   grep -qF 'weight: 2' "$d/first-call-targets-conventions.md"
   grep -qF 'target: trace' "$d/first-call-targets-conventions.md"
 }
