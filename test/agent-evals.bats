@@ -55,3 +55,37 @@ PY
 @test ".gitignore ignores eval results (#81)" {
   git -C "$KIT_ROOT" check-ignore -q evals/results/x.json
 }
+
+@test "install-kit builds the eval workspace (#81)" {
+  dir="$(mktemp -d)"
+  cd "$dir"
+  GIT_CONFIG_GLOBAL=/dev/null run bash "$KIT_ROOT/evals/hydrate-trigger/scaffold.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; rm -rf "$dir"; false; }
+  [ -d .git ]
+  grep -qF '/api/v2/user-profiles' src/server.js
+  [ -f scripts/working-memory-session-start.sh ]
+  grep -qF '`conventions.md`' AGENTS.md
+  naming="$(awk '/^## Naming/{f=1;next} /^## /{f=0} f' _working-memory/conventions.md)"
+  rm -rf "$dir"
+  [[ "$naming" == *kebab-case* ]] || false
+  [[ "$naming" != *"_Not yet defined._"* ]] || false
+}
+
+@test "every case is complete (#81)" {
+  for c in on-demand-conventions hydrate-trigger hydrate-non-trigger; do
+    d="$KIT_ROOT/evals/$c"
+    [ -f "$d/prompt.md" ]
+    [ -f "$d/scaffold.sh" ]
+    grep -qF 'scaffold_script: scaffold.sh' "$d/case.yaml"
+    [ -n "$(ls "$d"/graders/*.md)" ]
+  done
+  [ ! -e "$KIT_ROOT/evals/_shared/case.yaml" ]
+  [ ! -e "$KIT_ROOT/evals/_shared/prompt.md" ]
+}
+
+@test "on-demand case drops the Read grader (#81)" {
+  d="$KIT_ROOT/evals/on-demand-conventions/graders"
+  ! grep -rqF 'type: tool_used' "$d"
+  grep -qF 'weight: 2' "$d/first-call-targets-conventions.md"
+  grep -qF 'target: trace' "$d/first-call-targets-conventions.md"
+}
