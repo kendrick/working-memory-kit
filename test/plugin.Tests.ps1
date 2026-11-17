@@ -7,11 +7,11 @@ BeforeDiscovery { $script:HasWinPs = [bool](Get-Command powershell.exe -ErrorAct
 BeforeAll {
     . (Join-Path $PSScriptRoot 'Common.ps1')
 
-    # relpath|mtime ticks|size for everything under $root.
+    # Files: relpath|mtime ticks|size. Directories: relpath only, since NTFS dir mtimes keep settling after Copy-Item.
     function Get-Snapshot ($root) {
         $n = $root.TrimEnd('\', '/').Length + 1
         return @(Get-ChildItem -LiteralPath $root -Recurse -Force |
-            ForEach-Object { $_.FullName.Substring($n) + '|' + $_.LastWriteTimeUtc.Ticks + '|' + $(if ($_.PSIsContainer) { 0 } else { $_.Length }) } |
+            ForEach-Object { $_.FullName.Substring($n) + $(if ($_.PSIsContainer) { '' } else { '|' + $_.LastWriteTimeUtc.Ticks + '|' + $_.Length }) } |
             Sort-Object)
     }
 
