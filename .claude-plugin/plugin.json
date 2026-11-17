@@ -1,0 +1,9 @@
+{
+  "name": "working-memory-kit",
+  "description": "Drafts working memory for an existing project from its code, git history, README, and ADRs",
+  "author": { "name": "Kendrick Arnett" },
+  "homepage": "https://github.com/kendrick/working-memory-kit",
+  "license": "MIT",
+  "skills": ["./.claude/skills/"],
+  "agents": ["./.claude/agents/hydrator.md"]
+}

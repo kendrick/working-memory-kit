@@ -176,6 +176,15 @@ The installer ships the pipeline into your repo. Two ways to run it:
 - **Composite agent.** Ask Claude Code to "run the hydrator," ask Copilot Chat to use `.claude/agents/hydrator.md`, or ask Codex to use the project `hydrator` agent. It orchestrates the five phases end-to-end.
 - **Phase by phase.** Invoke `/hydrate-discover`, `/hydrate-extract`, `/hydrate-draft`, `/hydrate-reconcile`, and `/hydrate-propose` in Claude Code or Copilot. In Codex, use the same names with `$` instead of `/`. This route is useful when you want to review each phase before advancing.
 
+To run the pipeline in a repo where you haven't run the installer, install it as a Claude Code plugin from the [kendrick marketplace](https://github.com/kendrick/agent-plugins):
+
+```text
+/plugin marketplace add kendrick/agent-plugins
+/plugin install working-memory-kit@kendrick
+```
+
+The plugin carries only the hydrator agent and the five `hydrate-*` skills, named with a `working-memory-kit:` prefix. It doesn't create `_working-memory/`, the `CLAUDE.md` block, or the session hooks, so you still need the installer for those. Repos the installer has set up don't need the plugin, because they already have the same agent and skills in `.claude/`.
+
 Brand-new projects can skip hydration and edit the template files by hand. The pipeline expects a codebase to scan.
 
 After hydration lands, the `working-memory-synchronizer` agent handles ongoing maintenance. See [`guide/ai-assisted-hydration.md`](guide/ai-assisted-hydration.md) for the full pipeline design.
@@ -261,6 +270,7 @@ working-memory-kit/
 ├── ROADMAP.md               # Horizons, not dates; GitHub issues are the source of truth
 ├── guide/                   # Practitioner-facing guides
 │   └── ai-assisted-hydration.md  # Five-phase pipeline for deeper content extraction
+├── .claude-plugin/plugin.json  # Plugin manifest: ships the hydration agent and skills
 ├── .claude/
 │   ├── agents/hydrator.md   # Composite agent orchestrating the 5 hydration skills
 │   └── skills/              # Hydration reference skills (read natively by both tools)
