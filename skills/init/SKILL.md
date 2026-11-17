@@ -14,14 +14,14 @@ The installer bundled with this plugin does the work. Run it once against the pr
 On Windows, use the PowerShell command. It calls `powershell.exe` to pin Windows PowerShell 5.1, the installer's floor, even when your PowerShell tool is pwsh 7. Everywhere else, use the bash command.
 
 ```bash
-cd "${CLAUDE_PROJECT_DIR}" && bash "${CLAUDE_PLUGIN_ROOT}/init.sh" </dev/null
+cd '${CLAUDE_PROJECT_DIR}' && bash '${CLAUDE_PLUGIN_ROOT}/init.sh' </dev/null
 ```
 
 ```powershell
 Set-Location -LiteralPath '${CLAUDE_PROJECT_DIR}'; [Environment]::CurrentDirectory = (Get-Location).Path; powershell.exe -NoProfile -ExecutionPolicy Bypass -File '${CLAUDE_PLUGIN_ROOT}/init.ps1' --yes
 ```
 
-Keep both paths exactly as written. Each command moves into the project directory first, then runs the plugin's own copy of the installer.
+Keep both paths exactly as written. Each command moves into the project directory first, then runs the plugin's own copy of the installer. The single quotes keep any `$`, backtick, or `"` in a path literal. If either path above contains a straight single quote (`'`) or a typographic one (`‘`, `’`, `‚`, `‛`), run nothing and tell the user the installer can't be run safely from that path.
 
 ## 2. Add the User's Flags
 

@@ -108,6 +108,11 @@ PY
   [[ "$block" == *'</dev/null'* ]] || false
   # Claude Code substitutes only the braced form in skill text; the bare variable isn't in the Bash tool's env.
   [[ "$block" != *'$CLAUDE_PROJECT_DIR"'* ]] || false
+  # Single quotes can't hold these, and PowerShell also ends a single-quoted string on the typographic ones.
+  refusal="$(grep -F 'run nothing and tell the user the installer' "$SKILL")"
+  for q in "\`'\`" "‘" "’" "‚" "‛"; do
+    [[ "$refusal" == *"$q"* ]] || { echo "refusal misses $q"; false; }
+  done
 }
 
 @test "init skill's bash command installs like init.sh (#82)" {
@@ -156,5 +161,37 @@ PY
   [ "$status" -eq 0 ] || { echo "$output"; false; }
   [ -z "$output" ]
   grep -q coexistence_asked "$a/.working-memoryrc"
+  [ "$(snapshot "$root")" = "$before" ]
+}
+
+# A $ or backtick in a substituted path must stay literal, or the kit can install into a sibling dir.
+@test "init skill keeps shell-special characters in substituted paths literal (#82)" {
+  unset WMK_REVIEW_UNSET
+  root="$BATS_TEST_TMPDIR/plugin \$WMK_REVIEW_UNSET \`echo x\` \"q\""
+  cp -R "$KIT_ROOT/." "$root"
+  rm -rf "$root/.git"
+  if git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then false; fi
+  before="$(snapshot "$root")"
+  a="$BATS_TEST_TMPDIR/a/project\$WMK_REVIEW_UNSET"
+  sibling="$BATS_TEST_TMPDIR/a/project"
+  b="$BATS_TEST_TMPDIR/b/project\$WMK_REVIEW_UNSET"
+  new_repo "$a"
+  new_repo "$sibling"
+  new_repo "$b"
+  elsewhere="$BATS_TEST_TMPDIR/elsewhere"
+  mkdir -p "$elsewhere"
+  cmd="$(skill_block bash)"
+  cmd="${cmd//'${CLAUDE_PLUGIN_ROOT}'/$root}"
+  cmd="${cmd//'${CLAUDE_PROJECT_DIR}'/$a}"
+  cd "$elsewhere"
+  run bash -c "$cmd"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ "$(ls -A "$sibling")" = ".git" ]
+  cd "$b"
+  run bash "$KIT_ROOT/init.sh" </dev/null
+  [ "$status" -eq 0 ]
+  [ -f "$a/AGENTS.md" ]
+  run diff -r -x .git "$a" "$b"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
   [ "$(snapshot "$root")" = "$before" ]
 }
