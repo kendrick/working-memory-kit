@@ -167,7 +167,7 @@ while IFS= read -r p; do
   esac
 done <<< "$CHANGED_PATHS"
 if [ "$STACK_MANIFEST" = 1 ] && [ "$OV_CHANGED" = 0 ] && [ -f "$OV_FILE" ] \
-  && tr -d '\r' < "$OV_FILE" 2>/dev/null | grep -qE '^## Stack[[:space:]]*$'; then
+  && tr -d '\r' 2>/dev/null < "$OV_FILE" | grep -qE '^## Stack[[:blank:]]*$'; then
   STACK="working-memory: $STACK_NAMES changed this session. If the stack shifted, review the Stack section of _working-memory/projectOverview.md."
 fi
 

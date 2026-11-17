@@ -560,3 +560,17 @@ stack_line() {
   [ "$status" -eq 0 ]
   [ "$(sysmsg)" = "$(stack_line 'package.json, pnpm-lock.yaml')" ]
 }
+
+@test "an unreadable projectOverview.md stays silent (#4)" {
+  [ "$(id -u)" -ne 0 ] || skip "root can read a mode-000 file"
+  stack_setup; commit_base; bash "$START" </dev/null
+  printf '{"name":"y"}\n' > package.json
+  # assume-unchanged keeps git from trying to read the file, which would
+  # list it as changed and suppress the line before the read under test.
+  git update-index --assume-unchanged _working-memory/projectOverview.md
+  chmod 000 _working-memory/projectOverview.md
+  run bash "$HOOK"
+  chmod 644 _working-memory/projectOverview.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

@@ -12,6 +12,13 @@ Describe 'session-end hook' {
     }
     AfterEach { Remove-TestRepo $repo }
 
+    # Defined once so promote tests compare against the spec text, not the script's own template.
+    BeforeAll {
+        function Get-PromoteLine ($title) {
+            "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry `"$title`""
+        }
+    }
+
     # git diff HEAD needs a HEAD, so every test commits a base first, then makes
     # the "session's work" on top of it.
 
@@ -87,12 +94,6 @@ Describe 'session-end hook' {
             Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=50`nNUDGE_LINE_THRESHOLD=5000"
             Set-Content .ltm.yaml 'bank: x'
             $start = Join-Path $KitRoot 'template/scripts/working-memory-session-start.ps1'
-        }
-        # Defined here so the tests compare against the spec text, not the script's own template.
-        BeforeAll {
-            function Get-PromoteLine ($title) {
-                "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry `"$title`""
-            }
         }
 
         It 'session-end prints an ltm promote line per new decisionLog entry when .ltm.yaml exists (#33)' {
@@ -210,6 +211,13 @@ Describe 'session-end hook' {
 
     # #4: a root manifest changed since session start suggests a Stack review; a lockfile alone doesn't.
     Context 'stack freshness nudge (#4)' {
+        # Defined here so the tests compare against the spec text, not the script's own template.
+        BeforeAll {
+            function Get-StackLine ($names) {
+                "working-memory: $names changed this session. If the stack shifted, review the Stack section of _working-memory/projectOverview.md."
+            }
+        }
+
         BeforeEach {
             Set-Content .working-memoryrc "NUDGE_FILE_THRESHOLD=50`nNUDGE_LINE_THRESHOLD=5000"
             # Set-Content writes CRLF on Windows, which exercises the hook's CR strip.
@@ -218,15 +226,6 @@ Describe 'session-end hook' {
             Set-Content pnpm-lock.yaml 'lock'
             Set-Content pyproject.toml "[project]`nname = `"x`""
             $start = Join-Path $KitRoot 'template/scripts/working-memory-session-start.ps1'
-        }
-        # Defined here so the tests compare against the spec text, not the script's own template.
-        BeforeAll {
-            function Get-StackLine ($names) {
-                "working-memory: $names changed this session. If the stack shifted, review the Stack section of _working-memory/projectOverview.md."
-            }
-            function Get-PromoteLine ($title) {
-                "working-memory: new decisionLog entry `"$title`". If it applies beyond this repo: ltm promote _working-memory/decisionLog.md --entry `"$title`""
-            }
         }
 
         It 'a package.json change committed this session suggests a Stack review (#4)' {
@@ -337,6 +336,23 @@ Describe 'session-end hook' {
             & $start | Out-Null
             Set-Content package.json '{"name":"y"}'
             "$(Invoke-SessionEndHook)".Trim() | Should -BeNullOrEmpty
+        }
+
+        # A read failure must stay silent: stderr leaking would reach the user's terminal.
+        It 'an unreadable projectOverview.md stays silent (#4)' -Skip:($env:OS -eq 'Windows_NT' -or (id -u) -eq '0') {
+            git add -A; git commit -q -m base
+            & $start | Out-Null
+            Set-Content package.json '{"name":"y"}'
+            $ov = Join-Path (Get-Location) '_working-memory/projectOverview.md'
+            # chmod 000 alone makes git list the overview as changed, which would suppress the line before the read.
+            git update-index --assume-unchanged _working-memory/projectOverview.md
+            & chmod 000 $ov
+            try {
+                $all = & (Join-Path $KitRoot 'template/scripts/working-memory-session-end.ps1') *>&1 | Out-String
+                $code = $LASTEXITCODE
+            } finally { & chmod 600 $ov }
+            "$all".Trim() | Should -BeNullOrEmpty
+            $code | Should -BeIn @($null, 0)
         }
 
         It 'a manifest changed with a lockfile fires and lists both (#4)' {
