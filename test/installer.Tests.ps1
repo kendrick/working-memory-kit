@@ -470,7 +470,8 @@ Describe 'installer' {
 # any engine, including update-working-memory.ps1, which no other test runs.
 Describe 'shipped scripts under 5.1' {
     It '<_> parses when read as Windows-1252' -ForEach @('init.ps1', 'template/scripts/update-working-memory.ps1',
-        'template/scripts/working-memory-session-start.ps1', 'template/scripts/working-memory-session-end.ps1') {
+        'template/scripts/working-memory-session-start.ps1', 'template/scripts/working-memory-session-end.ps1',
+        'hooks/version-check.ps1') {
         $text = [Text.Encoding]::GetEncoding(1252).GetString([IO.File]::ReadAllBytes((Join-Path $KitRoot $_)))
         $errors = $null
         [void][Management.Automation.Language.Parser]::ParseInput($text, [ref]$null, [ref]$errors)
