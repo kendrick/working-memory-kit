@@ -56,7 +56,7 @@ setup_parity() {
   cmd="${cmd//'${CLAUDE_PROJECT_DIR}'/$a}"
 }
 
-@test "root manifest ships only init (#82)" {
+@test "root manifest ships init and one hook (#82, #91)" {
   run python3 - "$KIT_ROOT" <<'PY'
 import json, os, sys
 root = sys.argv[1]
@@ -65,8 +65,9 @@ assert m["name"] == "working-memory-kit", m["name"]
 # Each of these keys adds to its default location rather than replacing it, so any one would ship more than init.
 for k in ("skills", "agents", "commands", "hooks", "mcpServers", "lspServers", "outputStyles"):
     assert k not in m, k
-for p in ("agents", "commands", "hooks", "output-styles", ".mcp.json"):
+for p in ("agents", "commands", "output-styles", ".mcp.json"):
     assert not os.path.exists(os.path.join(root, p)), p
+assert sorted(os.listdir(os.path.join(root, "hooks"))) == ["hooks.json", "version-check.ps1", "version-check.sh"], os.listdir(os.path.join(root, "hooks"))
 assert sorted(os.listdir(os.path.join(root, "skills"))) == ["init"], os.listdir(os.path.join(root, "skills"))
 PY
   [ "$status" -eq 0 ] || { echo "$output"; false; }
@@ -82,7 +83,11 @@ r, e = json.loads(sys.argv[1]), json.loads(sys.argv[2])
 assert r["success"] is True
 assert r["provides"]["skills"] == ["working-memory-kit:init"], r["provides"]["skills"]
 assert r["provides"]["agents"] == [], r["provides"]["agents"]
-assert r["provides"]["hooks"] == [], r["provides"]["hooks"]
+h = r["provides"]["hooks"]
+assert len(h) == 1, h
+assert h[0]["event"] == "SessionStart" and h[0].get("matcher") == "startup", h
+assert "hooks/version-check.sh" in h[0]["command"] and "hooks/version-check.ps1" in h[0]["command"], h
+assert "working-memory-session-start" not in h[0]["command"], h
 assert e["success"] is True
 want = ["working-memory-kit:hydrate-" + p for p in ("discover", "draft", "extract", "propose", "reconcile")]
 assert sorted(e["provides"]["skills"]) == want, e["provides"]["skills"]
@@ -224,4 +229,100 @@ PY
   run diff -r -x .git "$a" "$b"
   [ "$status" -eq 0 ] || { echo "$output"; false; }
   [ "$(snapshot "$root")" = "$before" ]
+}
+
+# #91: the plugin's one hook. The command string comes out of hooks/hooks.json, so these run what Claude Code runs.
+hook_cmd() {
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["hooks"]["SessionStart"][0]["hooks"][0]["command"])' "$KIT_ROOT/hooks/hooks.json"
+}
+
+# seed_hook PROJECT PLUGIN: a plugin root holding the kit's hooks/ and a version.txt of PLUGIN, and a project whose marker holds PROJECT (no marker when it's empty).
+# Spaces in both paths are deliberate: the placeholder must stay one argument.
+seed_hook() {
+  root="$BATS_TEST_TMPDIR/plugin root"
+  proj="$BATS_TEST_TMPDIR/my project"
+  rm -rf "$root" "$proj"
+  mkdir -p "$root" "$proj/.claude"
+  cp -R "$KIT_ROOT/hooks" "$root/hooks"
+  printf '%s\n' "$2" > "$root/version.txt"
+  if [ -n "$1" ]; then printf '%s\n' "$1" > "$proj/.claude/working-memory-kit.version"; fi
+}
+
+run_hook() {
+  local c
+  c="$(hook_cmd)"
+  c="${c//'${CLAUDE_PLUGIN_ROOT}'/$root}"
+  cd "$proj" || return 1
+  run env CLAUDE_PROJECT_DIR="$proj" CLAUDE_PLUGIN_ROOT="$root" sh -c "$c"
+}
+
+@test "version hook warns when the project is behind, compared as semver (#91)" {
+  seed_hook 0.9.0 0.10.0
+  run_hook
+  [ "$status" -eq 0 ]
+  # As strings 0.9.0 sorts after 0.10.0, so a string comparison stays silent here.
+  [ "$output" = '{"systemMessage":"working-memory-kit: this project runs kit 0.9.0 and the plugin has 0.10.0. Run /working-memory-kit:init to upgrade it."}' ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert list(d) == ["systemMessage"]' "$output"
+}
+
+@test "version hook is silent when the project is newer (#91)" {
+  seed_hook 0.4.0 0.3.0
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]  # a "warn when they differ" check would fire here
+}
+
+@test "version hook is silent with no marker (#91)" {
+  seed_hook "" 0.10.0
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ ! -e "$proj/.claude/working-memory-kit.version" ]
+}
+
+@test "version hook is silent when equal and compares every field (#91)" {
+  seed_hook 0.10.0 0.10.0
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  seed_hook 1.0.0 0.99.0
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  seed_hook 0.10.1 0.10.2
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'runs kit 0.10.1 and the plugin has 0.10.2'* ]] || { echo "$output"; false; }
+}
+
+@test "version hook reads a CRLF marker and ignores junk (#91)" {
+  seed_hook "" 0.10.0
+  printf '0.9.0\r\n' > "$proj/.claude/working-memory-kit.version"
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'runs kit 0.9.0 and'* ]] || { echo "$output"; false; }
+  for junk in garbage "" 0.9; do
+    seed_hook "" 0.10.0
+    printf '%s' "$junk" > "$proj/.claude/working-memory-kit.version"
+    run_hook
+    [ "$status" -eq 0 ]
+    [ -z "$output" ] || { echo "marker '$junk': $output"; false; }
+  done
+}
+
+@test "version hook writes nothing (#91)" {
+  seed_hook 0.9.0 0.10.0
+  before_p="$(snapshot "$proj")"
+  before_r="$(snapshot "$root")"
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  [ "$(snapshot "$proj")" = "$before_p" ]
+  [ "$(snapshot "$root")" = "$before_r" ]
+}
+
+# "claude resolves each manifest" pins the hook's single command. This test checks that the hook never loads working memory, which the project's own session-start hook already does once.
+@test "version hook loads no working memory (#91)" {
+  [ -d "$KIT_ROOT/hooks" ]
+  ! grep -rqE 'working-memory-session-start|_working-memory|additionalContext' "$KIT_ROOT/hooks"
 }

@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Run shellcheck
-        run: shellcheck init.sh template/scripts/*.sh evals/_shared/install-kit.sh evals/*/scaffold.sh
+        run: shellcheck init.sh template/scripts/*.sh hooks/*.sh evals/_shared/install-kit.sh evals/*/scaffold.sh
 
   # init.ps1 and the .ps1 hooks are parity-written against the bash side; Pester
   # is the only thing that exercises that PowerShell behaviorally (the bats suite
@@ -95,5 +95,5 @@ jobs:
         shell: pwsh
         run: |
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
-          $r = 'init.ps1', 'template/scripts' | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Settings ./PSScriptAnalyzerSettings.psd1 }
+          $r = 'init.ps1', 'template/scripts', 'hooks' | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Settings ./PSScriptAnalyzerSettings.psd1 }
           if ($r) { $r | Format-Table -AutoSize | Out-String -Width 200 | Write-Host; exit 1 }

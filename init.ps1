@@ -843,6 +843,16 @@ if (Test-Path $hydrateSkillsDir) {
 
 Merge-ClaudeHooks (Join-Path $Template '.claude/settings.json') (Join-Path $TargetDir '.claude/settings.json')
 
+# The marker is kit-owned, so every run overwrites it and nothing goes through
+# .kitnew. The plugin's SessionStart hook compares the marker with the plugin's
+# version.txt (#91).
+$kitVersionFile = Join-Path $KitRoot 'version.txt'
+if (Test-Path -LiteralPath $kitVersionFile) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $TargetDir '.claude') | Out-Null
+    Copy-Item -LiteralPath $kitVersionFile -Destination (Join-Path $TargetDir '.claude/working-memory-kit.version') -Force
+    Write-Ok "recorded kit version $((Get-Content -LiteralPath $kitVersionFile -Raw).Trim()) in .claude/working-memory-kit.version"
+}
+
 # ---------- Codex config ----------
 
 # Codex discovers repository skills from .agents/skills. Install from the

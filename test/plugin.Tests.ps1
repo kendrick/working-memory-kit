@@ -78,3 +78,82 @@ Describe 'init skill (#82)' {
         finally { Remove-TestRepo $tmp }
     }
 }
+
+# The plugin's SessionStart hook (#91), mirroring the version hook cases in test/plugin.bats.
+Describe 'version hook (#91)' {
+    BeforeAll {
+        $script:Warn = '{"systemMessage":"working-memory-kit: this project runs kit 0.9.0 and the plugin has 0.10.0. Run /working-memory-kit:init to upgrade it."}'
+
+        # Spaces in both names are deliberate: each path must stay one argument.
+        function New-HookFixture ($projectVer, $pluginVer) {
+            $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('wmk-hook-' + [guid]::NewGuid().ToString('N').Substring(0, 10))
+            $root = Join-Path $tmp 'plugin root'
+            $proj = Join-Path $tmp 'my project'
+            New-Item -ItemType Directory -Path $root, (Join-Path $proj '.claude') -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $KitRoot 'hooks') -Destination (Join-Path $root 'hooks') -Recurse
+            [IO.File]::WriteAllText((Join-Path $root 'version.txt'), "$pluginVer`n")
+            $marker = Join-Path $proj '.claude/working-memory-kit.version'
+            if ($projectVer) { [IO.File]::WriteAllText($marker, "$projectVer`n") }
+            $env:CLAUDE_PROJECT_DIR = $proj
+            return @{ Tmp = $tmp; Root = $root; Proj = $proj; Marker = $marker }
+        }
+
+        function Invoke-Hook ($f) { return (& (Join-Path $f.Root 'hooks/version-check.ps1') | Out-String).Trim() }
+    }
+
+    BeforeEach { $script:SavedProjectDir = $env:CLAUDE_PROJECT_DIR }
+    AfterEach {
+        $env:CLAUDE_PROJECT_DIR = $script:SavedProjectDir
+        if ($script:F) { Remove-TestRepo $script:F.Tmp; $script:F = $null }
+    }
+
+    It 'warns when the project is behind, compared as semver (#91)' {
+        $script:F = New-HookFixture '0.9.0' '0.10.0'
+        Invoke-Hook $script:F | Should -BeExactly $script:Warn
+    }
+
+    It 'is silent when the project is newer (#91)' {
+        $script:F = New-HookFixture '0.4.0' '0.3.0'
+        Invoke-Hook $script:F | Should -BeNullOrEmpty
+    }
+
+    It 'is silent with no marker (#91)' {
+        $script:F = New-HookFixture '' '0.10.0'
+        Invoke-Hook $script:F | Should -BeNullOrEmpty
+        Test-Path -LiteralPath $script:F.Marker | Should -BeFalse
+    }
+
+    It 'reads a CRLF marker (#91)' {
+        $script:F = New-HookFixture '' '0.10.0'
+        [IO.File]::WriteAllText($script:F.Marker, "0.9.0`r`n")
+        Invoke-Hook $script:F | Should -BeExactly $script:Warn
+    }
+
+    It 'runs the hooks.json command under powershell.exe without bash (#91)' -Skip:(-not $script:HasWinPs -or $env:OS -ne 'Windows_NT') {
+        $script:F = New-HookFixture '0.9.0' '0.10.0'
+        $cmd = (Get-Content -LiteralPath (Join-Path $KitRoot 'hooks/hooks.json') -Raw | ConvertFrom-Json).hooks.SessionStart[0].hooks[0].command
+        # A hook that runs through PowerShell gets the placeholder with native backslashes.
+        $cmd = $cmd.Replace('${CLAUDE_PLUGIN_ROOT}', $script:F.Root)
+        $beforeP = Get-Snapshot $script:F.Proj
+        $beforeR = Get-Snapshot $script:F.Root
+        $savedPath = $env:PATH
+        try {
+            # With no Git entry on PATH there's no bash or sh to find, which is the case this command has to cover.
+            $env:PATH = (($env:PATH -split ';') | Where-Object { $_ -notmatch 'Git' }) -join ';'
+            # -EncodedCommand hands the line over byte for byte; -Command would lose its embedded quotes to 5.1's native argument passing.
+            $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+            # A 5.1 parent wraps a native child's stderr as an error record, and Pester's Stop preference makes that terminating.
+            # Claude Code reads the child's stderr from a pipe with no PowerShell parent, so Continue here matches the real launch.
+            $all = & { $ErrorActionPreference = 'Continue'; powershell.exe -NoProfile -EncodedCommand $enc 2>&1 }
+            $LASTEXITCODE | Should -Be 0
+        }
+        finally { $env:PATH = $savedPath }
+        $out = @($all | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] })
+        $err = @($all | Where-Object { $_ -is [Management.Automation.ErrorRecord] })
+        ($out -join "`n").Trim() | Should -BeExactly $script:Warn
+        # The only stderr is the unknown `exec`, the half of the polyglot PowerShell skips.
+        ($err -join "`n") | Should -Match "'exec'"
+        Get-Snapshot $script:F.Proj | Should -Be $beforeP
+        Get-Snapshot $script:F.Root | Should -Be $beforeR
+    }
+}

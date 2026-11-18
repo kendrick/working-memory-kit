@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "exec bash \"${CLAUDE_PLUGIN_ROOT}/hooks/version-check.sh\"; powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/version-check.ps1\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

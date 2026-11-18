@@ -74,7 +74,7 @@ In Claude Code, add the marketplace and install the plugin, then run its `init` 
 /working-memory-kit:init
 ```
 
-The skill takes the installer's flags as arguments, such as `/working-memory-kit:init --no-coexist`. It runs the same `init.sh` (or `init.ps1` on Windows) from the plugin's copy of the kit, so the result matches the command-line route below. The plugin adds only the `init` skill. The hydration skills and the hydrator agent arrive in your project's `.claude/` from the installer, as they do on the other route.
+The skill takes the installer's flags as arguments, such as `/working-memory-kit:init --no-coexist`. It runs the same `init.sh` (or `init.ps1` on Windows) from the plugin's copy of the kit, so the result matches the command-line route below. The plugin adds the `init` skill and one SessionStart hook. The installer records the kit version it copied in `.claude/working-memory-kit.version`. When a new session starts in a project whose recorded version is older than the plugin's, the hook prints one line telling you to run `/working-memory-kit:init` there again. It says nothing in projects the kit never set up. The hydration skills and the hydrator agent arrive in your project's `.claude/` from the installer, as they do on the other route.
 
 Or install from a shell:
 
@@ -277,6 +277,7 @@ working-memory-kit/
 │   └── plugin.json          # Manifest for the shipped Claude Code plugin
 ├── skills/
 │   └── init/SKILL.md        # /working-memory-kit:init, which runs the installer
+├── hooks/                   # The plugin's SessionStart version check
 ├── evals/                   # claude plugin eval cases (see test/README.md)
 ├── .claude/
 │   ├── .claude-plugin/plugin.json  # Eval-only manifest, never shipped
