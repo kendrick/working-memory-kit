@@ -1,6 +1,6 @@
 {
   "name": "working-memory-kit",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Exists for `claude plugin eval` runs against the kit; not listed in a marketplace.",
   "hooks": {
     "SessionStart": [
