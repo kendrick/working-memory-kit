@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "bump-minor-pre-major": true,
+  "pull-request-title-pattern": "chore(release): bump version to ${version}",
+  "bootstrap-sha": "1ba95c767ac0279515993b55e1ee8c8ce530b681",
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "docs", "section": "Documentation" },
+    { "type": "test", "section": "Testing" },
+    { "type": "ci", "section": "CI & Build" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "refactor", "section": "Refactor" },
+    { "type": "chore", "section": "Chores" }
+  ],
+  "packages": {
+    ".": {
+      "extra-files": [
+        { "type": "json", "path": ".claude-plugin/plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": ".claude/.claude-plugin/plugin.json", "jsonpath": "$.version" }
+      ]
+    }
+  }
+}
