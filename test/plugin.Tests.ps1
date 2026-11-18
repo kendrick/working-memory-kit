@@ -142,8 +142,9 @@ Describe 'version hook (#91)' {
             $env:PATH = (($env:PATH -split ';') | Where-Object { $_ -notmatch 'Git' }) -join ';'
             # -EncodedCommand hands the line over byte for byte; -Command would lose its embedded quotes to 5.1's native argument passing.
             $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
-            # A 5.1 host turns a native child's stderr into a terminating error under 2>$null, so merge it and split it back out.
-            $all = powershell.exe -NoProfile -EncodedCommand $enc 2>&1
+            # A 5.1 parent wraps a native child's stderr as an error record, and Pester's Stop preference makes that terminating.
+            # Claude Code reads the child's stderr from a pipe with no PowerShell parent, so Continue here matches the real launch.
+            $all = & { $ErrorActionPreference = 'Continue'; powershell.exe -NoProfile -EncodedCommand $enc 2>&1 }
             $LASTEXITCODE | Should -Be 0
         }
         finally { $env:PATH = $savedPath }
