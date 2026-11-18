@@ -74,7 +74,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: claude plugin eval . --scaffold --trust-plugin --no-publish --ablation none --model claude-sonnet-5-5 --threshold 0.66 --max-cost-usd 3 --json results.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: agent-evals-results
