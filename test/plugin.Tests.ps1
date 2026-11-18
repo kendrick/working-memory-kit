@@ -142,11 +142,16 @@ Describe 'version hook (#91)' {
             $env:PATH = (($env:PATH -split ';') | Where-Object { $_ -notmatch 'Git' }) -join ';'
             # -EncodedCommand hands the line over byte for byte; -Command would lose its embedded quotes to 5.1's native argument passing.
             $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
-            $out = powershell.exe -NoProfile -EncodedCommand $enc 2>$null
+            # A 5.1 host turns a native child's stderr into a terminating error under 2>$null, so merge it and split it back out.
+            $all = powershell.exe -NoProfile -EncodedCommand $enc 2>&1
             $LASTEXITCODE | Should -Be 0
         }
         finally { $env:PATH = $savedPath }
+        $out = @($all | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] })
+        $err = @($all | Where-Object { $_ -is [Management.Automation.ErrorRecord] })
         ($out -join "`n").Trim() | Should -BeExactly $script:Warn
+        # The only stderr is the unknown `exec`, the half of the polyglot PowerShell skips.
+        ($err -join "`n") | Should -Match "'exec'"
         Get-Snapshot $script:F.Proj | Should -Be $beforeP
         Get-Snapshot $script:F.Root | Should -Be $beforeR
     }
