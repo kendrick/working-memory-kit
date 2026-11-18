@@ -615,3 +615,11 @@ KITNEW_SH_NOTE='# working-memory-kit: a newer version of this file shipped. See 
   cmp "$f" stable
   [ "$(grep -cF 'a newer version of this file shipped' "$f")" = 1 ]
 }
+
+@test "install records the kit version in .claude (#91)" {
+  run_installer
+  cmp "$KIT_ROOT/version.txt" .claude/working-memory-kit.version
+  printf '0.0.1\n' > .claude/working-memory-kit.version
+  run_installer
+  cmp "$KIT_ROOT/version.txt" .claude/working-memory-kit.version
+}

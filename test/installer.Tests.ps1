@@ -24,6 +24,14 @@ Describe 'installer' {
         Get-Content .gitignore -Raw | Should -Match 'activeContext.md'
     }
 
+    It 'install records the kit version in .claude (#91)' {
+        Invoke-Installer | Out-Null
+        (Get-FileHash .claude/working-memory-kit.version).Hash | Should -Be (Get-FileHash (Join-Path $KitRoot 'version.txt')).Hash
+        [IO.File]::WriteAllText((Join-Path (Get-Location) '.claude/working-memory-kit.version'), "0.0.1`n")
+        Invoke-Installer | Out-Null
+        (Get-FileHash .claude/working-memory-kit.version).Hash | Should -Be (Get-FileHash (Join-Path $KitRoot 'version.txt')).Hash
+    }
+
     It 'fresh install exposes Codex skills, hydrator, and lifecycle hooks' {
         Invoke-Installer | Out-Null
         @(

@@ -908,6 +908,15 @@ fi
 
 merge_claude_hooks "$TEMPLATE/.claude/settings.json" "$TARGET_DIR/.claude/settings.json"
 
+# The marker is kit-owned, so every run overwrites it and nothing goes through
+# .kitnew. The plugin's SessionStart hook compares the marker with the plugin's
+# version.txt (#91).
+if [ -f "$KIT_ROOT/version.txt" ]; then
+  mkdir -p "$TARGET_DIR/.claude"
+  cp "$KIT_ROOT/version.txt" "$TARGET_DIR/.claude/working-memory-kit.version"
+  ok "recorded kit version $(tr -d '\r\n' < "$KIT_ROOT/version.txt") in .claude/working-memory-kit.version"
+fi
+
 # ---------- Codex config ----------
 
 # Codex discovers repository skills from .agents/skills. Install from the
