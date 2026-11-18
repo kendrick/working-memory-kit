@@ -52,7 +52,7 @@ jobs:
           else
             # Separate from the grep so a failed diff fails the step instead of reading as "no match".
             files="$(git diff --name-only "$BASE...$HEAD")"
-            if grep -qE '^(template/AGENTS\.md$|init\.sh$|template/scripts/working-memory-session-start\.sh$|\.claude/skills/|\.claude/agents/|\.claude-plugin/|evals/)' <<<"$files"; then
+            if grep -qE '^(template/AGENTS\.md$|init\.sh$|template/scripts/working-memory-session-start\.sh$|\.claude/|\.claude-plugin/|evals/)' <<<"$files"; then
               run=true
             fi
           fi

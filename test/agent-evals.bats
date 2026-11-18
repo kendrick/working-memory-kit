@@ -9,19 +9,20 @@ teardown() { teardown_repo; }
 
 # Read the hook command from the manifest so the "hook is silent" and "hook runs" tests can't drift from it.
 hook_cmd() {
-  python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["hooks"]["SessionStart"][0]["hooks"][0]["command"])' "$KIT_ROOT/.claude-plugin/plugin.json"
+  python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["hooks"]["SessionStart"][0]["hooks"][0]["command"])' "$KIT_ROOT/.claude/.claude-plugin/plugin.json"
 }
 
-@test "plugin.json shape (#81)" {
+@test "eval plugin.json shape (#81, #82)" {
   run python3 - "$KIT_ROOT" <<'PY'
 import json, os, sys
 root = sys.argv[1]
-m = json.load(open(os.path.join(root, ".claude-plugin/plugin.json")))
+m = json.load(open(os.path.join(root, ".claude/.claude-plugin/plugin.json")))
 assert m["name"] == "working-memory-kit", m["name"]
-assert m["skills"] == ["./.claude/skills/"], m["skills"]
-assert m["agents"] == ["./.claude/agents/hydrator.md"], m["agents"]
-for p in m["skills"] + m["agents"]:
-    assert os.path.exists(os.path.join(root, p)), p
+# .claude/ already has the default skills/ and agents/ layout; a key would double-register them.
+assert "skills" not in m and "agents" not in m
+for ph in ("discover", "extract", "draft", "reconcile", "propose"):
+    assert os.path.exists(os.path.join(root, ".claude/skills/hydrate-" + ph + "/SKILL.md")), ph
+assert os.path.exists(os.path.join(root, ".claude/agents/hydrator.md"))
 assert m["hooks"]["SessionStart"][0]["hooks"][0]["timeout"] == 10
 assert "SessionEnd" not in m["hooks"]
 assert not os.path.exists(os.path.join(root, ".claude-plugin/marketplace.json"))
@@ -85,6 +86,7 @@ PY
     grep -qxF '  scaffold_script: scaffold.sh' "$d/case.yaml"
     grep -q '^schema_version:' "$d/case.yaml"
     grep -qxF "name: $c" "$d/case.yaml"
+    grep -qxF 'plugins: ["../../.claude"]' "$d/case.yaml"
     [ -n "$(ls "$d"/graders/*.md)" ]
   done
   [ ! -e "$KIT_ROOT/evals/_shared/case.yaml" ]
@@ -116,10 +118,10 @@ PY
   [ -n "$re" ]
   for p in template/AGENTS.md init.sh template/scripts/working-memory-session-start.sh \
            .claude/skills/hydrate-discover/SKILL.md .claude/agents/hydrator.md \
-           .claude-plugin/plugin.json evals/hydrate-trigger/prompt.md; do
+           .claude-plugin/plugin.json .claude/.claude-plugin/plugin.json evals/hydrate-trigger/prompt.md; do
     grep -qE "$re" <<<"$p" || { echo "not gated: $p"; false; }
   done
-  for p in README.md test/agent-evals.bats init.ps1 template/AGENTS.md.bak; do
+  for p in README.md test/agent-evals.bats init.ps1 template/AGENTS.md.bak skills/init/SKILL.md; do
     if grep -qE "$re" <<<"$p"; then echo "gated but shouldn't be: $p"; false; fi
   done
 }

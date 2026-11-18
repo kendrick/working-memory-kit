@@ -1,5 +1,7 @@
 schema_version: "1.0"
 name: on-demand-conventions
+# Needs the SessionStart hook (the on-demand table), which only the .claude plugin ships.
+plugins: ["../../.claude"]
 # Under context: or the runner ignores it and runs the case in an empty workspace.
 context:
   scaffold_script: scaffold.sh
