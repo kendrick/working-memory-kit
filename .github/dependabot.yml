@@ -9,7 +9,6 @@ updates:
     schedule:
       interval: monthly
     commit-message:
-      # CHANGELOG.md is generated from Conventional Commits by git-cliff, and
-      # cliff.toml routes this prefix to the CI & Build section. An unprefixed
-      # bump would land in the changelog uncategorized.
+      # release-please's changelog-sections put the ci prefix under CI & Build.
+      # An unprefixed bump would be left out of CHANGELOG.md.
       prefix: "ci"

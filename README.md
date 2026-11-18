@@ -269,7 +269,7 @@ working-memory-kit/
 ├── init.ps1                 # Windows installer
 ├── CLAUDE.md                # Kit-level agent context (also auto-loaded by VS Code Copilot)
 ├── AGENTS.md                # Thin pointer to CLAUDE.md for agents that read only this
-├── CHANGELOG.md             # Generated from Conventional Commits by git-cliff (cliff.toml)
+├── CHANGELOG.md             # Written by release-please from Conventional Commits
 ├── ROADMAP.md               # Horizons, not dates; GitHub issues are the source of truth
 ├── guide/                   # Practitioner-facing guides
 │   └── ai-assisted-hydration.md  # Five-phase pipeline for deeper content extraction
@@ -329,7 +329,7 @@ CI runs bats on ubuntu and macOS, where macOS is there to catch BSD versus GNU d
 Issues and pull requests are welcome, through the [issue templates](.github/ISSUE_TEMPLATE/). Keep changes focused, and know these three before you open one:
 
 - **`init.sh` and `init.ps1` move together.** Any installer change needs both sides, and the `template/` parity check inside each one is the canary.
-- **Commits follow Conventional Commits.** git-cliff generates `CHANGELOG.md` from them, so your prefix decides whether the change shows up in the release notes.
+- **Commits follow Conventional Commits.** release-please writes `CHANGELOG.md` from them, so your prefix decides whether the change shows up in the release notes.
 - **Add or update the matching bats and Pester coverage.** The kit's whole promise is "idempotent, never clobbers your content," which is the hardest property to verify by eye and the easiest to regress.
 
 [`CLAUDE.md`](CLAUDE.md) covers the agent surface conventions if you're working on the kit itself with Claude Code, Copilot, or Codex.

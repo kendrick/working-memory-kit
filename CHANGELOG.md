@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to working-memory-kit, grouped by type and generated from the Conventional Commit history with [git-cliff](https://git-cliff.org). The kit installs from `main`; tagged releases appear as dated sections, and work since the last tag sits under Unreleased.
+Notable changes to working-memory-kit, grouped by type. release-please writes each release's section from the Conventional Commit history when its release PR merges. The kit installs from `main`, and each tagged release appears as a dated section.
 
 ## 0.3.0 (2026-07-24)
 
