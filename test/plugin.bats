@@ -321,7 +321,7 @@ run_hook() {
   [ "$(snapshot "$root")" = "$before_r" ]
 }
 
-# Test 2 pins the hook's single command. This test checks that the hook never loads working memory, which the project's own session-start hook already does once.
+# "claude resolves each manifest" pins the hook's single command. This test checks that the hook never loads working memory, which the project's own session-start hook already does once.
 @test "version hook loads no working memory (#91)" {
   [ -d "$KIT_ROOT/hooks" ]
   ! grep -rqE 'working-memory-session-start|_working-memory|additionalContext' "$KIT_ROOT/hooks"

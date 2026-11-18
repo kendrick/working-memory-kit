@@ -4,7 +4,7 @@
 # Anything else stays silent and exits 0: no marker (a repo the kit never set up), a junk or hand-edited one, or no plugin version. A hook error would land in the user's session.
 set -u
 
-# Prints the trimmed X.Y.Z in $1, or fails. CRs go because a Windows checkout with autocrlf gives version.txt, and so the marker, a CRLF.
+# CRs go because a Windows checkout with autocrlf gives version.txt, and so the marker, a CRLF.
 read_ver() {
   local v
   { [ -f "$1" ] && [ -r "$1" ]; } || return 1
@@ -15,7 +15,7 @@ read_ver() {
   printf '%s' "$v"
 }
 
-# True when X.Y.Z $1 is lower than $2. 10# keeps a leading zero from reading as octal.
+# 10# keeps a leading zero from reading as octal.
 older() {
   local a="$1." b="$2." x y
   while [ -n "$a" ]; do
